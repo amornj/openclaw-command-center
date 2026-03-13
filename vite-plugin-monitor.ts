@@ -29,7 +29,11 @@ function decodeProjectDir(encoded: string): string {
 }
 
 /** Extract a short project name from a decoded path */
-function shortProjectName(decoded: string): string {
+function shortProjectName(decoded: string, rawDirName?: string): string {
+  // Special case: claude-mem observer sessions decode to .../sessions
+  // which is meaningless — use a descriptive label instead
+  if (rawDirName?.includes('claude-mem')) return 'claude-mem';
+
   const parts = decoded.split('/').filter(Boolean);
   return parts[parts.length - 1] || decoded;
 }
@@ -136,17 +140,28 @@ function getCronJobNames(): Map<string, string> {
   }
 }
 
-/** Infer which agent produced a Claude session based on project context */
-function inferAgentFromProject(projName: string, entry: Record<string, unknown>): string {
+/** Infer which agent produced a Claude session based on project context.
+ *  rawDirName is the encoded directory name (e.g. '-Users-home--claude-mem-observer-sessions')
+ *  which preserves keywords that get mangled by dash-to-slash decoding. */
+function inferAgentFromProject(projName: string, entry: Record<string, unknown>, rawDirName?: string): string {
   const slug = String(entry.slug || '');
   const cwd = String(entry.cwd || '');
+  const model = String(
+    (entry.message as Record<string, unknown>)?.model || ''
+  );
 
   // ACP sessions via openclaw are Silver (Claude coding agent)
   if (slug.includes('acp') || slug.includes('claude')) return 'Silver';
   if (cwd.includes('openclaw-command-center')) return 'Silver';
 
-  // claude-mem observer sessions = Geo
+  // claude-mem observer sessions = Geo (check raw dir name because
+  // decodeProjectDir turns 'claude-mem' into 'claude/mem', and
+  // shortProjectName then yields just 'sessions')
+  if (rawDirName?.includes('claude-mem')) return 'Geo';
   if (projName.includes('claude-mem')) return 'Geo';
+
+  // openclaw-workspace with Sonnet model = Geo (research/writing sessions)
+  if (rawDirName?.includes('openclaw-workspace') && model.includes('sonnet')) return 'Geo';
 
   // Research/summarization projects = Geo
   if (projName.includes('annotate') || projName.includes('research')) return 'Geo';
@@ -171,7 +186,7 @@ function getClaudeSessionMessages(maxAgeMinutes: number, limit: number): Monitor
     for (const pd of projectDirs) {
       if (!pd.isDirectory()) continue;
       const projPath = join(PROJECTS_DIR, pd.name);
-      const projName = shortProjectName(decodeProjectDir(pd.name));
+      const projName = shortProjectName(decodeProjectDir(pd.name), pd.name);
 
       let jsonlFiles: string[];
       try {
@@ -217,7 +232,7 @@ function getClaudeSessionMessages(maxAgeMinutes: number, limit: number): Monitor
 
               if (tsMs < cutoff) break;
 
-              const agent = inferAgentFromProject(projName, d);
+              const agent = inferAgentFromProject(projName, d, pd.name);
 
               if (d.type === 'user' && !d.isMeta) {
                 const { text, truncated } = extractText(d.message);
