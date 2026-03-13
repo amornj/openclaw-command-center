@@ -133,6 +133,58 @@ h2 {
   margin-bottom: 0;
 }
 
+.org-chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #334155;
+  border-color: #64748b;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.refresh-btn .refresh-icon {
+  display: inline-block;
+  font-size: 16px;
+  transition: transform 0.4s ease;
+}
+
+.refresh-btn.refreshing .refresh-icon {
+  animation: spin-refresh 0.6s linear infinite;
+}
+
+@keyframes spin-refresh {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.last-refreshed {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
 .activity-source-badge {
   font-size: 12px;
   font-weight: 600;
@@ -1274,4 +1326,157 @@ h2 {
   margin: 0 0 16px;
   padding-bottom: 8px;
   border-bottom: 1px solid #1e2035;
+}
+
+/* === PROJECTS PAGE === */
+.projects-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.projects-page .page-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.projects-page .project-count {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.projects-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.projects-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid #1e2035;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.filter-chip.active {
+  background: #1e2035;
+  border-color: #6366f1;
+  color: #c7d2fe;
+}
+
+.projects-search {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid #1e2035;
+  background: #161822;
+  color: #e2e8f0;
+  font-size: 13px;
+  width: 220px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.projects-search:focus {
+  border-color: #6366f1;
+}
+
+.projects-search::placeholder {
+  color: #475569;
+}
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.project-card {
+  background: #161822;
+  border-radius: 10px;
+  padding: 18px;
+  border-top: 3px solid #64748b;
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.project-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.project-git-dot {
+  color: #10b981;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.project-desc {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin: 0;
+  flex-grow: 1;
+}
+
+.project-tech-row {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.project-tech-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #1a1c2e;
+  color: #818cf8;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.projects-empty {
+  text-align: center;
+  padding: 48px;
+  color: #475569;
+  font-size: 14px;
 }

@@ -3,6 +3,7 @@ import OrgChart from './pages/OrgChart';
 import Calendar from './pages/Calendar';
 import CronTracker from './pages/CronTracker';
 import Usage from './pages/Usage';
+import Projects from './pages/Projects';
 import './App.css';
 
 function App() {
@@ -34,9 +35,13 @@ function App() {
               <span className="nav-icon">📈</span>
               Usage
             </NavLink>
+            <NavLink to="/projects">
+              <span className="nav-icon">📁</span>
+              Projects
+            </NavLink>
           </div>
           <div className="nav-footer">
-            <span>v1.3.0</span>
+            <span>v1.4.0</span>
           </div>
         </nav>
         <main className="content">
@@ -45,6 +50,7 @@ function App() {
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/cron" element={<CronTracker />} />
             <Route path="/usage" element={<Usage />} />
+            <Route path="/projects" element={<Projects />} />
           </Routes>
         </main>
       </div>

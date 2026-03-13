@@ -15,20 +15,30 @@ export default function OrgChart() {
 
   const [activities, setActivities] = useState<AgentActivity[]>([]);
   const [dataSource, setDataSource] = useState<ActivitySource>('estimated');
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+
+  const loadActivity = async () => {
+    const data = await fetchAgentActivity();
+    setActivities(data);
+    const hasLive = data.some((a) => a.source === 'live');
+    const hasInferred = data.some((a) => a.source === 'inferred');
+    setDataSource(hasLive ? 'live' : hasInferred ? 'inferred' : 'estimated');
+    setLastRefreshed(new Date());
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadActivity();
+    // Brief visual feedback so user sees the refresh happened
+    setTimeout(() => setRefreshing(false), 400);
+  };
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
-      const data = await fetchAgentActivity();
-      if (!cancelled) {
-        setActivities(data);
-        const hasLive = data.some((a) => a.source === 'live');
-        const hasInferred = data.some((a) => a.source === 'inferred');
-        setDataSource(hasLive ? 'live' : hasInferred ? 'inferred' : 'estimated');
-      }
+      if (!cancelled) await loadActivity();
     }
-
     load();
     const interval = setInterval(load, 10_000);
     return () => { cancelled = true; clearInterval(interval); };
@@ -43,11 +53,27 @@ export default function OrgChart() {
           <h2>Organization Chart</h2>
           <p className="subtitle">OpenClaw Agent Hierarchy</p>
         </div>
-        <span className={`activity-source-badge ${dataSource}`}>
-          {dataSource === 'live' && '● Live'}
-          {dataSource === 'inferred' && '◐ Inferred'}
-          {dataSource === 'estimated' && '○ Estimated'}
-        </span>
+        <div className="org-chart-controls">
+          <button
+            className={`refresh-btn${refreshing ? ' refreshing' : ''}`}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh agent activity"
+          >
+            <span className="refresh-icon">↻</span>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {lastRefreshed && (
+            <span className="last-refreshed">
+              Updated {lastRefreshed.toLocaleTimeString()}
+            </span>
+          )}
+          <span className={`activity-source-badge ${dataSource}`}>
+            {dataSource === 'live' && '● Live'}
+            {dataSource === 'inferred' && '◐ Inferred'}
+            {dataSource === 'estimated' && '○ Estimated'}
+          </span>
+        </div>
       </div>
 
       <div className="org-tree">
