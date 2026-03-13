@@ -139,8 +139,11 @@ function getRecentMessages(maxAgeMinutes = 60, limit = 200): MonitorEntry[] {
           if (stat.mtimeMs < cutoff) continue;
 
           // File stat cache: skip re-parsing if file hasn't changed
+          // Bypass cache for recently-modified files (< 2 min) to avoid serving
+          // stale data from actively-written session files
+          const isFresh = Date.now() - stat.mtimeMs < 120_000;
           const cached = fileStatCache.get(filePath);
-          if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+          if (!isFresh && cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
             // Use cached entries, filtering by cutoff
             for (const ce of cached.entries) {
               const k = entryKey(ce);
@@ -382,25 +385,36 @@ function detectLiveAgentActivity(): AgentLiveStatus[] {
     }
   } catch { /* ignore */ }
 
+  // If no running cron process found, provide schedule context but do NOT
+  // mark Echo as active — only real processes trigger active state
   if (!echoActive) {
     const hour = new Date().getHours();
     const minute = new Date().getMinutes();
-    const activeWindows = [6, 7, 8, 12, 18, 22];
-    const isInWindow = activeWindows.some((h) => hour === h && minute < 15);
-    if (isInWindow) {
-      echoActive = true;
-      echoLastSeen = new Date().toISOString();
+    const nowMinutes = hour * 60 + minute;
+    const cronWindows = [
+      { h: 6, task: 'Morning briefing digest' },
+      { h: 7, task: 'Medical research scan' },
+      { h: 8, task: 'Financial monitoring' },
+      { h: 12, task: 'Midday summary' },
+      { h: 18, task: 'Evening portfolio check' },
+      { h: 22, task: 'End-of-day reports' },
+      { h: 23, task: 'Daily tweet summary' },
+    ];
+
+    // Find the most recently completed window (within last 20 min)
+    const recentlyCompleted = cronWindows.find(
+      (w) => nowMinutes >= w.h * 60 && nowMinutes < w.h * 60 + 20
+    );
+
+    if (recentlyCompleted) {
+      // Recently finished — provide context but keep inactive
+      const completedAt = new Date();
+      completedAt.setHours(recentlyCompleted.h, 0, 0, 0);
+      echoLastSeen = completedAt.toISOString();
       echoDetectedVia = 'cron_window';
-      const taskMap: Record<number, string> = {
-        6: 'Running morning briefing digest',
-        7: 'Executing medical research scan',
-        8: 'Processing financial monitoring',
-        12: 'Running midday summary',
-        18: 'Executing evening portfolio check',
-        22: 'Running end-of-day reports',
-      };
-      echoTask = taskMap[hour] ?? 'Executing scheduled cron job';
+      echoTask = `Completed: ${recentlyCompleted.task}`;
     }
+    // echoActive stays false — only real process detection triggers active
   }
 
   results.push({
@@ -475,6 +489,7 @@ export default function monitorPlugin(): Plugin {
         try {
           const activity = detectLiveAgentActivity();
           res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
           res.end(JSON.stringify(activity));
         } catch (e) {
           res.statusCode = 500;
@@ -493,6 +508,7 @@ export default function monitorPlugin(): Plugin {
             Math.min(limit, 500)
           );
           res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
           res.end(JSON.stringify(messages));
         } catch (e) {
           res.statusCode = 500;

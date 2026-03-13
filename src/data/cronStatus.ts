@@ -84,8 +84,9 @@ function inferStatus(job: CronJob, now: Date): CronStatus {
   const nowMinutes = hour * 60 + minute;
   const jobMinutes = jobH * 60 + jobM;
 
-  if (nowMinutes >= jobMinutes && nowMinutes < jobMinutes + 2) return 'Running';
-  if (nowMinutes > jobMinutes) return 'Succeeded';
+  // Without a live backend, we can't know if a job is truly running.
+  // Show Succeeded once past the scheduled time rather than guessing Running.
+  if (nowMinutes >= jobMinutes) return 'Succeeded';
   return 'Scheduled';
 }
 

@@ -77,18 +77,41 @@ function liveToActivity(live: LiveStatus): AgentActivity {
   const minutesSince = lastSeen ? (Date.now() - lastSeen) / 60_000 : Infinity;
   const status: ActivityStatus = minutesSince < 30 ? 'idle' : 'standby';
 
+  // Echo-specific: show richer detail for recently completed cron jobs
+  let detail: string | null = null;
+  if (live.agentId === 'echo') {
+    if (live.currentTask?.startsWith('Completed:')) {
+      // Backend detected a recently completed cron window
+      detail = live.currentTask;
+    } else if (lastSeen && minutesSince < 20) {
+      detail = `Finished ${timeAgo(live.lastSeenAt!)}`;
+    } else {
+      detail = echoNextRunDetail(now);
+    }
+  } else {
+    detail = lastSeen
+      ? `Last seen ${timeAgo(live.lastSeenAt!)}`
+      : 'No recent activity detected';
+  }
+
   return {
     agentId: live.agentId,
     status,
     currentTask: null,
     lastActiveAt: live.lastSeenAt || new Date(now.getTime() - 60 * 60_000).toISOString(),
     source: 'live',
-    detail: lastSeen
-      ? `Last seen ${timeAgo(live.lastSeenAt!)}`
-      : 'No recent activity detected',
+    detail,
     detectedVia: live.detectedVia,
     healthClass: computeHealthClass(status),
   };
+}
+
+/** Compute Echo's "next run" detail from cron schedule */
+function echoNextRunDetail(now: Date): string {
+  const hour = now.getHours();
+  const cronHours = [6, 7, 8, 12, 18, 22, 23];
+  const next = cronHours.find((h) => h > hour) ?? cronHours[0];
+  return `Next run at ${String(next).padStart(2, '0')}:00`;
 }
 
 /**
@@ -139,35 +162,42 @@ function fallbackEcho(): AgentActivity {
   const hour = now.getHours();
   const minute = now.getMinutes();
 
-  const activeWindows = [6, 7, 8, 12, 18, 22];
-  const isInWindow = activeWindows.some((h) => hour === h && minute < 15);
+  // Never assume active from time window alone — only real process detection
+  // should trigger active state. Provide schedule context instead.
+  const cronWindows = [
+    { h: 6, task: 'Morning briefing digest' },
+    { h: 7, task: 'Medical research scan (PubMed)' },
+    { h: 8, task: 'Financial monitoring alerts' },
+    { h: 12, task: 'Midday summary compilation' },
+    { h: 18, task: 'Evening portfolio check' },
+    { h: 22, task: 'End-of-day report generation' },
+    { h: 23, task: 'Daily tweet summary' },
+  ];
+  const cronHours = cronWindows.map((w) => w.h);
 
-  if (isInWindow) {
-    const taskMap: Record<number, string> = {
-      6: 'Running morning briefing digest',
-      7: 'Executing medical research scan (PubMed)',
-      8: 'Processing financial monitoring alerts',
-      12: 'Running midday summary compilation',
-      18: 'Executing evening portfolio check',
-      22: 'Running end-of-day report generation',
-    };
+  // Check if we're within 20 min after a cron window (recently completed)
+  const recentlyCompleted = cronWindows.find(
+    (w) => hour === w.h && minute < 20
+  );
+
+  if (recentlyCompleted) {
     return {
       agentId: 'echo',
-      status: 'active',
-      currentTask: taskMap[hour] ?? 'Executing scheduled cron job',
-      lastActiveAt: now.toISOString(),
+      status: 'idle',
+      currentTask: null,
+      lastActiveAt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), recentlyCompleted.h, 0).toISOString(),
       source: 'inferred',
-      detail: `Cron window ${String(hour).padStart(2, '0')}:00–${String(hour).padStart(2, '0')}:15`,
-      healthClass: 'working',
+      detail: `Completed: ${recentlyCompleted.task}`,
+      healthClass: 'idle',
     };
   }
 
-  const nextWindow = activeWindows.find((h) => h > hour) ?? activeWindows[0];
+  const nextWindow = cronHours.find((h) => h > hour) ?? cronHours[0];
   return {
     agentId: 'echo',
     status: 'standby',
     currentTask: null,
-    lastActiveAt: getLastCronRun(now, activeWindows),
+    lastActiveAt: getLastCronRun(now, cronHours),
     source: 'inferred',
     detail: `Next run at ${String(nextWindow).padStart(2, '0')}:00`,
     healthClass: 'ok',
