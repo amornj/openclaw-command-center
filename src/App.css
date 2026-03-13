@@ -1,3 +1,14 @@
+/* === GLOBAL RESET === */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
 /* === LAYOUT === */
 .app {
   display: flex;
@@ -299,7 +310,137 @@ h2 {
   background: #1e2035;
 }
 
-/* Weekly View */
+/* === Daily View (Timeline) === */
+.daily-view {
+  width: 100%;
+}
+
+.daily-date-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.daily-date-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.daily-count {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 80px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 68px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #1e2035;
+}
+
+.timeline-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.timeline-time {
+  position: absolute;
+  left: -80px;
+  width: 60px;
+  text-align: right;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #64748b;
+  padding-top: 10px;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -16px;
+  top: 12px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+  background: #0f1117;
+  z-index: 1;
+}
+
+.timeline-content {
+  background: #161822;
+  border: 1px solid #1e2035;
+  border-left: 3px solid;
+  border-radius: 8px;
+  padding: 10px 14px;
+  flex: 1;
+  transition: transform 0.1s;
+}
+
+.timeline-content:hover {
+  transform: translateX(2px);
+}
+
+.timeline-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-status {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.timeline-desc {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.timeline-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.job-cat-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.timeline-duration {
+  font-size: 10px;
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.no-jobs-today {
+  text-align: center;
+  padding: 40px;
+  color: #475569;
+  font-size: 14px;
+}
+
+/* === Weekly View === */
 .daily-banner {
   background: #161822;
   border: 1px solid #1e2035;
@@ -336,6 +477,11 @@ h2 {
   min-height: 200px;
 }
 
+.day-column.today {
+  border-color: #6366f150;
+  box-shadow: 0 0 12px #6366f115;
+}
+
 .day-header {
   text-align: center;
   padding: 10px 8px;
@@ -346,6 +492,15 @@ h2 {
   background: #1a1c2e;
   color: #818cf8;
   border-bottom: 1px solid #1e2035;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.today-dot {
+  font-size: 8px;
+  color: #6366f1;
 }
 
 .day-jobs {
@@ -408,7 +563,105 @@ h2 {
   font-weight: 600;
 }
 
-/* Yearly View */
+/* === Monthly Calendar View === */
+.monthly-view {
+  width: 100%;
+}
+
+.month-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0 0 16px;
+}
+
+.month-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: #1e2035;
+  border: 1px solid #1e2035;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mcal-header {
+  background: #1a1c2e;
+  text-align: center;
+  padding: 10px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #818cf8;
+}
+
+.mcal-cell {
+  background: #161822;
+  min-height: 100px;
+  padding: 6px 8px;
+  transition: background 0.1s;
+}
+
+.mcal-cell:hover:not(.mcal-empty) {
+  background: #1a1c2e;
+}
+
+.mcal-cell.mcal-empty {
+  background: #12141e;
+}
+
+.mcal-cell.mcal-today {
+  background: #1a1c2e;
+  box-shadow: inset 0 0 0 1px #6366f150;
+}
+
+.mcal-day-num {
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.mcal-today .mcal-day-num {
+  color: #818cf8;
+  font-weight: 700;
+}
+
+.mcal-jobs {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.mcal-job-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.mcal-more {
+  font-size: 9px;
+  color: #475569;
+}
+
+.mcal-job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mcal-job-name {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === Yearly View === */
 .monthly-banner {
   background: #161822;
   border: 1px solid #1e2035;
@@ -611,13 +864,227 @@ h2 {
   white-space: nowrap;
 }
 
-/* === GLOBAL RESET === */
-* {
-  box-sizing: border-box;
+/* === USAGE PAGE === */
+.usage-page {
+  width: 100%;
 }
 
-body {
+.usage-header {
+  margin-bottom: 24px;
+}
+
+.usage-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.usage-notice code {
+  background: #0f172a;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #818cf8;
+}
+
+.notice-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.usage-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.provider-card {
+  background: #161822;
+  border: 1px solid #1e2035;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.provider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px;
+  background: #1a1c2e;
+  border-bottom: 1px solid #1e2035;
+}
+
+.provider-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.provider-name h3 {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.provider-icon {
+  font-size: 22px;
+}
+
+.provider-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.auth-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: #1e293b;
+  color: #67e8f9;
+}
+
+.live-dot {
+  font-size: 12px;
+  color: #10b981;
+  font-weight: 600;
+}
+
+.rate-limits-section,
+.models-section {
+  padding: 18px 22px;
+}
+
+.rate-limits-section h4,
+.models-section h4 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  margin: 0 0 14px;
+  font-weight: 600;
+}
+
+.rate-limits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.rate-limit-item {
+  background: #1a1c2e;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.rl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rl-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.rl-values {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.rl-bar-track {
+  height: 6px;
+  background: #0f1117;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rl-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+.rl-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.rl-tier {
+  font-size: 10px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.rl-reset {
+  font-size: 10px;
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.models-section {
+  border-top: 1px solid #1e2035;
+}
+
+.models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.model-usage-card {
+  background: #1a1c2e;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.model-usage-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #818cf8;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  margin-bottom: 10px;
+}
+
+.model-usage-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.model-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
 }

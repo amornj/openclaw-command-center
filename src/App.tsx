@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import OrgChart from './pages/OrgChart';
 import Calendar from './pages/Calendar';
 import CronTracker from './pages/CronTracker';
+import Usage from './pages/Usage';
 import './App.css';
 
 function App() {
@@ -29,9 +30,13 @@ function App() {
               <span className="nav-icon">⏱</span>
               Cron Tracker
             </NavLink>
+            <NavLink to="/usage">
+              <span className="nav-icon">📈</span>
+              Usage
+            </NavLink>
           </div>
           <div className="nav-footer">
-            <span>v1.1.0</span>
+            <span>v1.2.0</span>
           </div>
         </nav>
         <main className="content">
@@ -39,6 +44,7 @@ function App() {
             <Route path="/" element={<OrgChart />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/cron" element={<CronTracker />} />
+            <Route path="/usage" element={<Usage />} />
           </Routes>
         </main>
       </div>
