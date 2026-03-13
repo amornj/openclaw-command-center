@@ -60,22 +60,23 @@ export async function fetchProjects(): Promise<{ projects: Project[]; source: 'l
 }
 
 function fallbackDescription(name: string): string {
-  const map: Record<string, string> = {
-    'annotate': 'Image annotation tool',
-    'basicdicom': 'DICOM medical imaging viewer',
-    'claude-mem': 'Claude persistent memory plugin',
-    'claude-telegram': 'Claude Telegram bot integration',
-    'code-blue-timer-export': 'Code Blue Timer export assets',
-    'code-blue-timer-privacy-support': 'Code Blue Timer privacy & support pages',
-    'notion': 'Notion workspace & integrations',
-    'obsidian': 'Obsidian vault & knowledge base',
-    'openclaw-claude-subscription': 'OpenClaw Claude subscription management',
-    'prasison': 'Prasison agent framework experiments',
-    'rojo': 'Rojo project workspace',
-    'skills': 'Claude Code custom skills collection',
-    'poodthai.zip': 'Poodthai project archive',
-  };
-  return map[name] || `${name} project`;
+  const entries: Array<[string, string]> = [
+    ['annotate', 'Image annotation tool'],
+    ['basicdicom', 'DICOM medical imaging viewer'],
+    ['claude-mem', 'Claude persistent memory plugin'],
+    ['claude-telegram', 'Claude Telegram bot integration'],
+    ['code-blue-timer-export', 'Code Blue Timer export assets'],
+    ['code-blue-timer-privacy-support', 'Code Blue Timer privacy & support pages'],
+    ['notion', 'Notion workspace & integrations'],
+    ['obsidian', 'Obsidian vault & knowledge base'],
+    ['openclaw-claude-subscription', 'OpenClaw Claude subscription management'],
+    ['prasison', 'Prasison agent framework experiments'],
+    ['rojo', 'Rojo project workspace'],
+    ['skills', 'Claude Code custom skills collection'],
+    ['poodthai.zip', 'Poodthai project archive'],
+  ];
+  const map = new Map(entries);
+  return map.get(name) || `${name} project`;
 }
 
 // Seeded from local filesystem scan — used as fallback when live API unavailable

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchProjects } from '../data/projectsData';
-import type { Project } from '../data/projectsData';
+import { fetchProjects, type Project } from '../data/projectsData';
 import { trackPageView } from '../data/sessionUsage';
 
 const CATEGORY_COLORS: Record<string, string> = {

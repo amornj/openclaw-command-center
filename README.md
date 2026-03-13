@@ -1,73 +1,108 @@
-# React + TypeScript + Vite
+# OpenClaw Command Center
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A local dashboard for monitoring the OpenClaw workspace.
 
-Currently, two official plugins are available:
+## What it is
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+OpenClaw Command Center is a small local React/Vite app that gives a dashboard view of:
 
-## React Compiler
+- **Org Chart** — Brodie, Silver, Geo, Echo and their roles
+- **Calendar** — cron schedule views (daily / weekly / monthly / yearly)
+- **Cron Tracker** — job state overview
+- **Usage** — local OpenClaw/session usage signals
+- **Projects** — summaries of projects inside `/Users/home/projects`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+This app is designed for local use on Amornj's machine.
 
-## Expanding the ESLint configuration
+## Agent model
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Brodie** = main GPT-5.4 orchestrator
+- **Silver** = Claude ACP coding agent
+- **Geo** = Claude ACP research / writing / summarization agent
+- **Echo** = GPT-5.4 responsible for cron jobs
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Current data model
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+The app uses a mix of:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- **live local data** where practical
+- **inferred local data** where direct live wiring is partial
+- **seeded fallback data** when a local bridge is not yet available
+
+### Current intent
+
+- Prefer **live local OpenClaw/session data** over provider usage APIs
+- Treat provider billing/usage bridges as **future optional enhancements**
+- Prefer **real local project scanning** for the Projects page
+- Prefer **real local cron data** for calendar/tracker views when feasible
+
+## Pages
+
+### Org Chart
+Shows the current agent map and activity state.
+
+Goals:
+- active vs idle cues
+- current task when available
+- refresh button to re-pull state
+
+### Calendar
+Shows cron scheduling across:
+- daily
+- weekly
+- monthly
+- yearly
+
+### Cron Tracker
+Shows job-level status such as:
+- Scheduled
+- Running
+- Succeeded
+- Failed
+- Partial
+- Disabled
+- Unknown
+
+### Usage
+Shows local OpenClaw/session usage first.
+
+Future option:
+- provider-specific usage bridge for OpenAI / Anthropic
+
+### Projects
+Scans `/Users/home/projects` and renders project cards with inferred descriptions.
+
+## Local run
+
+```bash
+cd /Users/home/projects/openclaw-command-center
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Build
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd /Users/home/projects/openclaw-command-center
+npm run build
 ```
+
+## Command launcher
+
+This project is also exposed through the shell shortcut:
+
+```bash
+openclaw command center
+```
+
+Current launch target:
+
+- `http://localhost:3849`
+
+## Notes
+
+This project is intentionally pragmatic:
+- local-first
+- dashboard-oriented
+- easy to iterate
+- okay with mixed live/inferred/seeded data while bridges are still being built
