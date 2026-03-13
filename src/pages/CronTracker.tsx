@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchCronStatuses, type CronJobStatus, type CronStatus } from '../data/cronStatus';
+import { trackPageView, trackRefreshPoll } from '../data/sessionUsage';
 
 const STATUS_CONFIG: Record<CronStatus, { color: string; bg: string; icon: string }> = {
   Scheduled:  { color: '#94a3b8', bg: '#1e293b', icon: '◷' },
@@ -20,11 +21,12 @@ export default function CronTracker() {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
+    trackPageView('Cron Tracker');
     let cancelled = false;
     loadStatuses();
 
     // Refresh every 30s
-    const interval = setInterval(loadStatuses, 30_000);
+    const interval = setInterval(() => { trackRefreshPoll('Cron Tracker'); loadStatuses(); }, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
 
     async function loadStatuses() {

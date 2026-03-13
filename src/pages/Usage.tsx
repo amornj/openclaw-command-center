@@ -1,61 +1,192 @@
-import { useState, useEffect } from 'react';
-import { fetchUsageData, type UsageProvider, type RateLimit } from '../data/usageData';
+import { useState, useEffect, useRef } from 'react';
+import {
+  fetchUsageData,
+  type CombinedUsage,
+  type UsageProvider,
+  type RateLimit,
+} from '../data/usageData';
+import {
+  trackPageView,
+  trackRefreshPoll,
+  tickActiveTime,
+  resetSessionStats,
+  formatDuration,
+  type SessionStats,
+  type FeatureUsage,
+} from '../data/sessionUsage';
 
 export default function Usage() {
-  const [providers, setProviders] = useState<UsageProvider[]>([]);
+  const [data, setData] = useState<CombinedUsage | null>(null);
   const [loading, setLoading] = useState(true);
-  const anyLive = providers.some((p) => p.isLive);
+  const tickRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
+    trackPageView('Usage');
+
     let cancelled = false;
     load();
-    const interval = setInterval(load, 15_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const pollInterval = setInterval(() => {
+      trackRefreshPoll('Usage');
+      load();
+    }, 15_000);
+
+    // Tick active time every 10s
+    tickRef.current = setInterval(() => tickActiveTime(10_000), 10_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(pollInterval);
+      clearInterval(tickRef.current);
+    };
 
     async function load() {
-      const data = await fetchUsageData();
+      const result = await fetchUsageData();
       if (cancelled) return;
-      setProviders(data);
+      setData(result);
       setLoading(false);
     }
   }, []);
+
+  const hasBridge = data?.providers != null;
 
   return (
     <div className="usage-page">
       <div className="usage-header">
         <div>
-          <h2>API Usage</h2>
+          <h2>Usage</h2>
           <p className="subtitle">
-            Rate limits & consumption across providers
-            <span className={`source-badge ${anyLive ? 'live' : 'derived'}`}>
-              {anyLive ? '● Live' : '○ Estimated limits'}
-            </span>
+            Live session activity & resource tracking
+            <span className="source-badge live">● Local Session</span>
+            {hasBridge && <span className="source-badge live" style={{ marginLeft: 6 }}>● Provider Bridge</span>}
           </p>
         </div>
       </div>
 
-      {!anyLive && (
-        <div className="usage-notice">
-          <span className="notice-icon">ℹ</span>
-          <div>
-            <strong>Showing known rate limits for your OAuth tiers.</strong> To wire live usage data,
-            run a local API bridge at <code>/api/usage</code> that proxies Anthropic and OpenAI usage endpoints.
-          </div>
-        </div>
-      )}
-
-      {loading ? (
+      {loading || !data ? (
         <div className="cron-loading">Loading...</div>
       ) : (
-        <div className="usage-providers">
-          {providers.map((provider) => (
-            <ProviderCard key={provider.name} provider={provider} />
-          ))}
-        </div>
+        <>
+          {/* ── Primary: Local session usage ── */}
+          <SessionCard session={data.local.session} uptime={data.local.uptime} />
+
+          {/* ── Optional: Provider bridge data ── */}
+          {hasBridge ? (
+            <div className="usage-providers">
+              <h3 className="section-divider">Provider API Usage (Live Bridge)</h3>
+              {data.providers!.map((provider) => (
+                <ProviderCard key={provider.name} provider={provider} />
+              ))}
+            </div>
+          ) : (
+            <div className="usage-notice" style={{ marginTop: 20 }}>
+              <span className="notice-icon">ℹ</span>
+              <div>
+                <strong>Provider-level usage is optional.</strong> To see token counts and billing
+                from Anthropic/OpenAI, run a local bridge at <code>/api/usage</code>.
+                The session data above is always live and requires no setup.
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
+
+// ── Local session card (primary) ──────────────────────────────────
+
+function SessionCard({ session, uptime }: { session: SessionStats; uptime: number }) {
+  const started = new Date(session.sessionStart);
+  const lastAct = new Date(session.lastActivity);
+
+  return (
+    <div className="provider-card">
+      <div className="provider-header">
+        <div className="provider-name">
+          <span className="provider-icon">🐾</span>
+          <h3>OpenClaw Session</h3>
+        </div>
+        <div className="provider-badges">
+          <span className="auth-badge">Local</span>
+          <span className="live-dot">● Live</span>
+          <button
+            className="reset-btn"
+            onClick={() => { resetSessionStats(); window.location.reload(); }}
+            title="Reset session stats"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      {/* Session stats grid */}
+      <div className="rate-limits-section">
+        <h4>Session Overview</h4>
+        <div className="session-stats-grid">
+          <StatBox label="Uptime" value={formatDuration(uptime)} />
+          <StatBox label="Active Time" value={formatDuration(session.activeTimeMs)} />
+          <StatBox label="Page Views" value={session.pageViews.toLocaleString()} />
+          <StatBox label="Auto-Refresh Polls" value={session.refreshPolls.toLocaleString()} />
+          <StatBox
+            label="Session Started"
+            value={started.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          />
+          <StatBox
+            label="Last Activity"
+            value={lastAct.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          />
+        </div>
+      </div>
+
+      {/* Per-feature breakdown */}
+      <div className="models-section">
+        <h4>Feature Usage</h4>
+        <div className="models-grid">
+          {session.features.map((f) => (
+            <FeatureCard key={f.name} feature={f} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="session-stat-box">
+      <span className="stat-value">{value}</span>
+      <span className="stat-label">{label}</span>
+    </div>
+  );
+}
+
+function FeatureCard({ feature }: { feature: FeatureUsage }) {
+  const lastStr = feature.lastAccessed
+    ? new Date(feature.lastAccessed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : 'Never';
+
+  return (
+    <div className="model-usage-card">
+      <div className="model-usage-name">{feature.name}</div>
+      <div className="model-usage-stats">
+        <div className="model-stat">
+          <span className="stat-value">{feature.accessCount}</span>
+          <span className="stat-label">Views</span>
+        </div>
+        <div className="model-stat">
+          <span className="stat-value">{feature.pollCount}</span>
+          <span className="stat-label">Polls</span>
+        </div>
+        <div className="model-stat">
+          <span className="stat-value">{lastStr}</span>
+          <span className="stat-label">Last Used</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Provider card (optional bridge) ───────────────────────────────
 
 function ProviderCard({ provider }: { provider: UsageProvider }) {
   return (
@@ -66,12 +197,11 @@ function ProviderCard({ provider }: { provider: UsageProvider }) {
           <h3>{provider.name}</h3>
         </div>
         <div className="provider-badges">
-          <span className="auth-badge">{provider.authMethod}</span>
+          <span className="auth-badge">Bridge</span>
           {provider.isLive && <span className="live-dot">● Live</span>}
         </div>
       </div>
 
-      {/* Rate Limits */}
       <div className="rate-limits-section">
         <h4>Rate Limits</h4>
         <div className="rate-limits-grid">
@@ -81,7 +211,6 @@ function ProviderCard({ provider }: { provider: UsageProvider }) {
         </div>
       </div>
 
-      {/* Models */}
       <div className="models-section">
         <h4>Models</h4>
         <div className="models-grid">

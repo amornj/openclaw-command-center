@@ -36,7 +36,7 @@ function App() {
             </NavLink>
           </div>
           <div className="nav-footer">
-            <span>v1.2.0</span>
+            <span>v1.3.0</span>
           </div>
         </nav>
         <main className="content">

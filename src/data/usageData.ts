@@ -1,19 +1,25 @@
 /**
- * Usage data fetching for Claude and OpenAI APIs.
+ * Usage data for OpenClaw Command Center.
  *
- * Architecture:
- * 1. Try to fetch from local bridge API (/api/usage/claude, /api/usage/openai)
- * 2. Fall back to session-estimated data based on known rate limits
+ * Architecture (priority order):
+ * 1. LOCAL SESSION DATA (primary) — real usage tracked by the app itself
+ *    via localStorage. Always available, always live.
+ * 2. PROVIDER API BRIDGE (optional/future) — proxy to Anthropic/OpenAI
+ *    billing APIs at /api/usage. Only used when a backend is running.
  *
- * To wire live data, run a small local API server that proxies:
- *   - Claude: https://api.anthropic.com/v1/messages/count_tokens (or billing API when available)
- *   - OpenAI: https://api.openai.com/v1/organization/usage
+ * The local session layer tracks what OpenClaw actually does: page views,
+ * auto-refresh polls, feature usage, and active time. This is the data
+ * users see by default. Provider-level token/billing data is supplemental.
  */
+
+import { loadSessionStats, type SessionStats } from './sessionUsage';
+
+// ── Shared types ──────────────────────────────────────────────────
 
 export interface UsageProvider {
   name: string;
   icon: string;
-  authMethod: string;
+  source: 'local' | 'provider-bridge';
   models: ModelUsage[];
   rateLimits: RateLimit[];
   isLive: boolean;
@@ -24,7 +30,7 @@ export interface ModelUsage {
   inputTokens: number;
   outputTokens: number;
   requests: number;
-  costEstimate: number | null; // USD, null if OAuth (no billing)
+  costEstimate: number | null;
 }
 
 export interface RateLimit {
@@ -32,70 +38,49 @@ export interface RateLimit {
   limit: number;
   used: number;
   unit: string;
-  resetAt: string | null; // ISO datetime
+  resetAt: string | null;
   tier: string;
 }
 
-const USAGE_API = '/api/usage';
+// ── Local session usage (primary) ─────────────────────────────────
 
-export async function fetchUsageData(): Promise<UsageProvider[]> {
-  // Try live API first
-  try {
-    const res = await fetch(`${USAGE_API}`, { signal: AbortSignal.timeout(2000) });
-    if (res.ok) {
-      return (await res.json()) as UsageProvider[];
-    }
-  } catch {
-    // No backend — fall through
-  }
-
-  return estimatedUsage();
+export interface LocalUsageSummary {
+  session: SessionStats;
+  uptime: number; // ms since session start
 }
 
-/**
- * Estimated usage based on known OAuth tier rate limits.
- * These represent the user's known tier limits and estimated session activity.
- */
-function estimatedUsage(): UsageProvider[] {
-  const now = new Date();
-  const minuteReset = new Date(now);
-  minuteReset.setMinutes(minuteReset.getMinutes() + 1, 0, 0);
-  const dayReset = new Date(now);
-  dayReset.setHours(24, 0, 0, 0);
+export function fetchLocalUsage(): LocalUsageSummary {
+  const session = loadSessionStats();
+  const uptime = Date.now() - new Date(session.sessionStart).getTime();
+  return { session, uptime };
+}
 
-  return [
-    {
-      name: 'Anthropic (Claude)',
-      icon: '🟣',
-      authMethod: 'OAuth',
-      isLive: false,
-      models: [
-        { model: 'claude-opus-4-6', inputTokens: 0, outputTokens: 0, requests: 0, costEstimate: null },
-        { model: 'claude-sonnet-4-6', inputTokens: 0, outputTokens: 0, requests: 0, costEstimate: null },
-        { model: 'claude-haiku-4-5', inputTokens: 0, outputTokens: 0, requests: 0, costEstimate: null },
-      ],
-      rateLimits: [
-        { name: 'Requests / min', limit: 50, used: 0, unit: 'req', resetAt: minuteReset.toISOString(), tier: 'OAuth Free' },
-        { name: 'Input tokens / min', limit: 40_000, used: 0, unit: 'tokens', resetAt: minuteReset.toISOString(), tier: 'OAuth Free' },
-        { name: 'Output tokens / min', limit: 8_000, used: 0, unit: 'tokens', resetAt: minuteReset.toISOString(), tier: 'OAuth Free' },
-        { name: 'Tokens / day', limit: 1_000_000, used: 0, unit: 'tokens', resetAt: dayReset.toISOString(), tier: 'OAuth Free' },
-      ],
-    },
-    {
-      name: 'OpenAI',
-      icon: '🟢',
-      authMethod: 'OAuth',
-      isLive: false,
-      models: [
-        { model: 'gpt-4o', inputTokens: 0, outputTokens: 0, requests: 0, costEstimate: null },
-        { model: 'gpt-4o-mini', inputTokens: 0, outputTokens: 0, requests: 0, costEstimate: null },
-        { model: 'o3', inputTokens: 0, outputTokens: 0, requests: 0, costEstimate: null },
-      ],
-      rateLimits: [
-        { name: 'Requests / min (GPT-4o)', limit: 500, used: 0, unit: 'req', resetAt: minuteReset.toISOString(), tier: 'Tier 5' },
-        { name: 'Tokens / min (GPT-4o)', limit: 800_000, used: 0, unit: 'tokens', resetAt: minuteReset.toISOString(), tier: 'Tier 5' },
-        { name: 'Requests / day', limit: 10_000, used: 0, unit: 'req', resetAt: dayReset.toISOString(), tier: 'Tier 5' },
-      ],
-    },
-  ];
+// ── Provider bridge (optional / future) ───────────────────────────
+
+const PROVIDER_API = '/api/usage';
+
+export async function fetchProviderUsage(): Promise<UsageProvider[] | null> {
+  try {
+    const res = await fetch(PROVIDER_API, { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      const data = (await res.json()) as UsageProvider[];
+      return data.map((p) => ({ ...p, source: 'provider-bridge' as const, isLive: true }));
+    }
+  } catch {
+    // No backend running — this is expected and fine
+  }
+  return null;
+}
+
+// ── Combined fetch (local first, provider optional) ───────────────
+
+export interface CombinedUsage {
+  local: LocalUsageSummary;
+  providers: UsageProvider[] | null; // null = bridge not available
+}
+
+export async function fetchUsageData(): Promise<CombinedUsage> {
+  const local = fetchLocalUsage();
+  const providers = await fetchProviderUsage();
+  return { local, providers };
 }

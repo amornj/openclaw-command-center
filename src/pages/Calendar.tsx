@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { cronJobs, DAYS_OF_WEEK, MONTHS, type CronJob } from '../data/cronJobs';
 import { fetchCronStatuses, type CronJobStatus } from '../data/cronStatus';
+import { trackPageView, trackRefreshPoll } from '../data/sessionUsage';
 
 type View = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -10,9 +11,10 @@ export default function Calendar() {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
+    trackPageView('Calendar');
     let cancelled = false;
     load();
-    const interval = setInterval(load, 30_000);
+    const interval = setInterval(() => { trackRefreshPoll('Calendar'); load(); }, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
 
     async function load() {
