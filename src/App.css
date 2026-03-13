@@ -1488,6 +1488,7 @@ h2 {
   height: calc(100vh - 32px);
   padding: 24px;
   gap: 0;
+  position: relative;
 }
 
 .monitor-header {
@@ -1527,6 +1528,14 @@ h2 {
 .monitor-select:focus {
   outline: none;
   border-color: #6366f1;
+}
+
+.monitor-poll-select {
+  width: 56px;
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 12px;
+  text-align: center;
 }
 
 .monitor-search {
@@ -1631,6 +1640,13 @@ h2 {
   color: #334155;
 }
 
+/* Session separator — visual break between different sessions */
+.monitor-session-sep {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #2a2d45 20%, #2a2d45 80%, transparent 100%);
+  margin: 4px 12px;
+}
+
 /* Log rows */
 .monitor-row {
   display: flex;
@@ -1643,6 +1659,18 @@ h2 {
 
 .monitor-row:hover {
   background: rgba(99, 102, 241, 0.05);
+}
+
+.monitor-truncatable {
+  cursor: pointer;
+}
+
+.monitor-truncatable:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.monitor-row-expanded {
+  background: rgba(99, 102, 241, 0.03);
 }
 
 .monitor-time {
@@ -1698,12 +1726,67 @@ h2 {
   min-width: 0;
 }
 
+.monitor-content-expanded {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .monitor-dir-received .monitor-content {
   color: #94a3b8;
 }
 
 .monitor-dir-sent .monitor-content {
   color: #d1d5db;
+}
+
+/* Truncation badge */
+.monitor-truncated-badge {
+  color: #6366f1;
+  font-size: 10px;
+  font-style: italic;
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+.monitor-truncatable:hover .monitor-truncated-badge {
+  opacity: 1;
+}
+
+/* Stop reason badge (end_turn, tool_use, etc.) */
+.monitor-stop-reason {
+  flex-shrink: 0;
+  color: #475569;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  margin-left: 8px;
+  background: rgba(71, 85, 105, 0.15);
+  border-radius: 3px;
+}
+
+/* Scroll-to-bottom button */
+.monitor-scroll-btn {
+  position: absolute;
+  bottom: 44px;
+  right: 36px;
+  background: #1e2035;
+  border: 1px solid #2a2d45;
+  color: #a78bfa;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.monitor-scroll-btn:hover {
+  background: #2a2d45;
+  border-color: #6366f1;
+  color: #c4b5fd;
 }
 
 /* Footer */

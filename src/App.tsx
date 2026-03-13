@@ -46,7 +46,7 @@ function App() {
             </NavLink>
           </div>
           <div className="nav-footer">
-            <span>v1.5.0</span>
+            <span>v1.6.0</span>
           </div>
         </nav>
         <main className="content">

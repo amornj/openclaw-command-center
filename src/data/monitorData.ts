@@ -3,6 +3,11 @@
  * from the live Vite plugin endpoint.
  *
  * Data source: live local Claude session JSONL files
+ *
+ * Patterns adapted from clawmonitor:
+ *   - Ring buffer for bounded memory
+ *   - Deduplication via entry keys
+ *   - Health class abstraction for visual mapping
  */
 
 export interface MonitorEntry {
@@ -12,6 +17,12 @@ export interface MonitorEntry {
   content: string;
   project: string;
   sessionId: string;
+  /** Whether content was truncated on the backend */
+  truncated: boolean;
+  /** Stop reason from assistant (end_turn, tool_use, etc.) */
+  stopReason?: string;
+  /** Model used */
+  model?: string;
 }
 
 export type MonitorFilter = {
@@ -20,13 +31,57 @@ export type MonitorFilter = {
   search?: string;
 };
 
+/** Health class for visual mapping (inspired by clawmonitor state.py) */
+export type HealthClass = 'ok' | 'working' | 'idle' | 'alert';
+
+/**
+ * Ring buffer: keeps at most `maxSize` entries, dropping oldest.
+ * Prevents unbounded memory growth during long sessions.
+ */
+const RING_MAX = 500;
+let ringBuffer: MonitorEntry[] = [];
+/** Merge new entries into ring buffer, deduplicating by key */
+export function mergeIntoBuffer(newEntries: MonitorEntry[]): MonitorEntry[] {
+  if (newEntries.length === 0) return ringBuffer;
+
+  const existingKeys = new Set(ringBuffer.map(entryKey));
+  const fresh = newEntries.filter((e) => !existingKeys.has(entryKey(e)));
+
+  if (fresh.length > 0) {
+    ringBuffer = [...ringBuffer, ...fresh]
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+    // Trim to ring buffer max
+    if (ringBuffer.length > RING_MAX) {
+      ringBuffer = ringBuffer.slice(ringBuffer.length - RING_MAX);
+    }
+  }
+
+  return ringBuffer;
+}
+
+/** Get current buffer contents (newest last) */
+export function getBuffer(): MonitorEntry[] {
+  return ringBuffer;
+}
+
+/** Clear the ring buffer */
+export function clearBuffer(): void {
+  ringBuffer = [];
+}
+
+/** Entry dedup key */
+function entryKey(e: MonitorEntry): string {
+  return `${e.timestamp}|${e.agent}|${e.direction}|${e.sessionId}`;
+}
+
 /**
  * Fetch recent monitor messages from the live endpoint.
  * Falls back to empty array if backend is unavailable.
  */
 export async function fetchMonitorMessages(
   maxAgeMinutes = 60,
-  limit = 100
+  limit = 200
 ): Promise<MonitorEntry[]> {
   try {
     const resp = await fetch(
@@ -34,12 +89,13 @@ export async function fetchMonitorMessages(
       { signal: AbortSignal.timeout(3000) }
     );
     if (resp.ok) {
-      return (await resp.json()) as MonitorEntry[];
+      const data = (await resp.json()) as MonitorEntry[];
+      return mergeIntoBuffer(data);
     }
   } catch {
     // Backend unavailable
   }
-  return [];
+  return ringBuffer;
 }
 
 /** Filter entries client-side */
@@ -80,3 +136,15 @@ export const agentColors: Record<string, string> = {
   Geo: '#34d399',
   Echo: '#fbbf24',
 };
+
+/** Map agent status to health class for consistent visual treatment */
+export function healthClass(
+  isActive: boolean,
+  hasAlert: boolean = false,
+  isIdle: boolean = false
+): HealthClass {
+  if (hasAlert) return 'alert';
+  if (isActive) return 'working';
+  if (isIdle) return 'idle';
+  return 'ok';
+}

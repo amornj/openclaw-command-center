@@ -15,6 +15,12 @@
 export type ActivityStatus = 'active' | 'idle' | 'standby';
 export type ActivitySource = 'live' | 'inferred' | 'estimated';
 
+/**
+ * Health class for visual treatment (adapted from clawmonitor's health_class).
+ * Decouples state computation from visual representation.
+ */
+export type HealthClass = 'ok' | 'working' | 'idle' | 'alert';
+
 export interface AgentActivity {
   agentId: string;
   status: ActivityStatus;
@@ -23,6 +29,10 @@ export interface AgentActivity {
   source: ActivitySource;
   /** Optional detail shown as secondary text */
   detail: string | null;
+  /** How the working state was detected */
+  detectedVia?: string;
+  /** Health class for visual mapping */
+  healthClass: HealthClass;
 }
 
 /** Shape returned by the Vite plugin /api/agents/activity */
@@ -33,6 +43,16 @@ interface LiveStatus {
   currentProject: string | null;
   currentTask: string | null;
   source: 'live';
+  detectedVia?: string;
+}
+
+/** Compute health class from status */
+function computeHealthClass(status: ActivityStatus): HealthClass {
+  switch (status) {
+    case 'active': return 'working';
+    case 'idle': return 'idle';
+    case 'standby': return 'ok';
+  }
 }
 
 /** Convert live process detection to UI-ready AgentActivity */
@@ -47,22 +67,27 @@ function liveToActivity(live: LiveStatus): AgentActivity {
       lastActiveAt: live.lastSeenAt || now.toISOString(),
       source: 'live',
       detail: live.currentProject ? `Project: ${live.currentProject}` : null,
+      detectedVia: live.detectedVia,
+      healthClass: 'working',
     };
   }
 
   // Not active — determine idle vs standby
   const lastSeen = live.lastSeenAt ? new Date(live.lastSeenAt).getTime() : 0;
   const minutesSince = lastSeen ? (Date.now() - lastSeen) / 60_000 : Infinity;
+  const status: ActivityStatus = minutesSince < 30 ? 'idle' : 'standby';
 
   return {
     agentId: live.agentId,
-    status: minutesSince < 30 ? 'idle' : 'standby',
+    status,
     currentTask: null,
     lastActiveAt: live.lastSeenAt || new Date(now.getTime() - 60 * 60_000).toISOString(),
     source: 'live',
     detail: lastSeen
       ? `Last seen ${timeAgo(live.lastSeenAt!)}`
       : 'No recent activity detected',
+    detectedVia: live.detectedVia,
+    healthClass: computeHealthClass(status),
   };
 }
 
@@ -105,6 +130,7 @@ function fallbackSilver(): AgentActivity {
     lastActiveAt: new Date(Date.now() - 30 * 60_000).toISOString(),
     source: 'estimated',
     detail: 'Live detection unavailable',
+    healthClass: 'idle',
   };
 }
 
@@ -132,6 +158,7 @@ function fallbackEcho(): AgentActivity {
       lastActiveAt: now.toISOString(),
       source: 'inferred',
       detail: `Cron window ${String(hour).padStart(2, '0')}:00–${String(hour).padStart(2, '0')}:15`,
+      healthClass: 'working',
     };
   }
 
@@ -143,6 +170,7 @@ function fallbackEcho(): AgentActivity {
     lastActiveAt: getLastCronRun(now, activeWindows),
     source: 'inferred',
     detail: `Next run at ${String(nextWindow).padStart(2, '0')}:00`,
+    healthClass: 'ok',
   };
 }
 
@@ -163,16 +191,18 @@ function fallbackGeo(): AgentActivity {
   const now = new Date();
   const hour = now.getHours();
   const isWorkingHours = hour >= 9 && hour <= 21;
+  const status: ActivityStatus = isWorkingHours ? 'idle' : 'standby';
 
   return {
     agentId: 'geo',
-    status: isWorkingHours ? 'idle' : 'standby',
+    status,
     currentTask: null,
     lastActiveAt: new Date(
       now.getTime() - (isWorkingHours ? 25 * 60_000 : 4 * 3_600_000)
     ).toISOString(),
     source: 'estimated',
     detail: isWorkingHours ? 'Available for research tasks' : 'Off-hours standby',
+    healthClass: computeHealthClass(status),
   };
 }
 
@@ -191,6 +221,7 @@ function fallbackBrodie(others: AgentActivity[]): AgentActivity {
       lastActiveAt: now.toISOString(),
       source: 'inferred',
       detail: `${activeNames.length} agent${activeNames.length > 1 ? 's' : ''} active`,
+      healthClass: 'working',
     };
   }
 
@@ -204,6 +235,7 @@ function fallbackBrodie(others: AgentActivity[]): AgentActivity {
     ),
     source: 'inferred',
     detail: 'Monitoring agent pool',
+    healthClass: 'ok',
   };
 }
 
