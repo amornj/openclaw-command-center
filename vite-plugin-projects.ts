@@ -11,12 +11,21 @@ interface ProjectMeta {
   pyproject: boolean;
 }
 
+function shouldHideProject(name: string): boolean {
+  return name.startsWith('.') || [
+    'node_modules',
+    '__pycache__',
+    '.git',
+  ].includes(name);
+}
+
 function scanProjects(projectsDir: string): ProjectMeta[] {
   const entries = readdirSync(projectsDir, { withFileTypes: true });
   const results: ProjectMeta[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (shouldHideProject(entry.name)) continue;
     const dir = join(projectsDir, entry.name);
     const meta: ProjectMeta = {
       name: entry.name,

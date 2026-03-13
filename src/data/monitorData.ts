@@ -23,6 +23,10 @@ export interface MonitorEntry {
   stopReason?: string;
   /** Model used */
   model?: string;
+  /** Data source: claude-session, openclaw-main, cron-run */
+  source?: string;
+  /** Event status: ok, error, running, delivered, unknown */
+  status?: string;
 }
 
 export type MonitorFilter = {
@@ -38,7 +42,7 @@ export type HealthClass = 'ok' | 'working' | 'idle' | 'alert';
  * Ring buffer: keeps at most `maxSize` entries, dropping oldest.
  * Prevents unbounded memory growth during long sessions.
  */
-const RING_MAX = 500;
+const RING_MAX = 1500;
 let ringBuffer: MonitorEntry[] = [];
 /** Merge new entries into ring buffer, deduplicating by key */
 export function mergeIntoBuffer(newEntries: MonitorEntry[]): MonitorEntry[] {

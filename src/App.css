@@ -1765,6 +1765,50 @@ h2 {
   border-radius: 3px;
 }
 
+/* Source badge (Claude, OpenClaw, Cron) */
+.monitor-source {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  margin-right: 4px;
+  background: rgba(100, 116, 139, 0.12);
+  border-radius: 3px;
+}
+
+/* Status badges */
+.monitor-status-badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  margin-left: 6px;
+  border-radius: 3px;
+}
+.monitor-status-error {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.15);
+}
+
+/* Error row highlight */
+.monitor-row-error {
+  border-left: 2px solid #f87171;
+}
+
+/* Footer agent counts */
+.monitor-footer-agents {
+  display: flex;
+  gap: 10px;
+}
+.monitor-footer-agent {
+  font-size: 10px;
+  font-weight: 500;
+}
+
 /* Scroll-to-bottom button */
 .monitor-scroll-btn {
   position: absolute;

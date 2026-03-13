@@ -10,10 +10,17 @@ import {
   type MonitorFilter,
 } from '../data/monitorData';
 
-/** Available poll intervals (inspired by clawmonitor's `f` key cycling) */
+/** Available poll intervals */
 const POLL_OPTIONS = [2, 5, 10, 30] as const;
 const AGENTS = ['all', 'Silver', 'Brodie', 'Geo', 'Echo'];
 const DIRECTIONS = ['all', 'received', 'sent'] as const;
+
+/** Source label for display */
+const SOURCE_LABELS: Record<string, string> = {
+  'claude-session': 'Claude',
+  'openclaw-main': 'OpenClaw',
+  'cron-run': 'Cron',
+};
 
 export default function Monitor() {
   useEffect(() => { trackPageView('Monitor'); }, []);
@@ -28,12 +35,20 @@ export default function Monitor() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [fetchCount, setFetchCount] = useState(0);
 
   const logRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  // Track whether user has scrolled away from bottom
+  // Use refs for the polling loop so interval changes take effect immediately
+  const pollIntervalRef = useRef(pollInterval);
+  const isLiveRef = useRef(isLive);
+  const maxAgeRef = useRef(maxAge);
+  pollIntervalRef.current = pollInterval;
+  isLiveRef.current = isLive;
+  maxAgeRef.current = maxAge;
+
   const handleScroll = useCallback(() => {
     const el = logRef.current;
     if (!el) return;
@@ -48,22 +63,39 @@ export default function Monitor() {
     setShowScrollBtn(false);
   }, []);
 
-  const load = useCallback(async () => {
+  // Core fetch function — always uses latest refs
+  const doFetch = useCallback(async () => {
     setIsRefreshing(true);
-    const data = await fetchMonitorMessages(maxAge, 200);
-    setEntries([...data]); // new array ref to trigger render
+    // Scale limit with time range so older agent entries aren't cut off
+    const limit = maxAgeRef.current > 60 ? 500 : 200;
+    const data = await fetchMonitorMessages(maxAgeRef.current, limit);
+    setEntries([...data]);
     setHasData(data.length > 0);
     setLastFetch(new Date());
+    setFetchCount((c) => c + 1);
     setIsRefreshing(false);
-  }, [maxAge]);
+  }, []);
 
-  // Polling loop
+  // Polling loop: re-schedules itself with current interval from ref
   useEffect(() => {
-    load();
-    if (!isLive) return;
-    const interval = setInterval(load, pollInterval * 1000);
-    return () => clearInterval(interval);
-  }, [isLive, maxAge, pollInterval, load]);
+    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      await doFetch();
+      if (cancelled || !isLiveRef.current) return;
+      timer = setTimeout(tick, pollIntervalRef.current * 1000);
+    };
+
+    tick();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  // Restart the loop when live/paused toggles, time range changes, or poll rate changes
+  }, [isLive, maxAge, pollInterval, doFetch]);
 
   // Auto-scroll on new entries
   useEffect(() => {
@@ -73,9 +105,7 @@ export default function Monitor() {
   }, [entries, autoScroll]);
 
   // Clear buffer when time range changes
-  useEffect(() => {
-    clearBuffer();
-  }, [maxAge]);
+  useEffect(() => { clearBuffer(); }, [maxAge]);
 
   const filtered = filterEntries(entries, filter);
 
@@ -91,12 +121,18 @@ export default function Monitor() {
     });
   };
 
+  // Compute agent counts for the status bar
+  const agentCounts = new Map<string, number>();
+  for (const e of entries) {
+    agentCounts.set(e.agent, (agentCounts.get(e.agent) || 0) + 1);
+  }
+
   return (
     <div className="monitor-page">
       <div className="monitor-header">
         <div>
           <h2>Monitor</h2>
-          <p className="subtitle">Agent Message Activity Log</p>
+          <p className="subtitle">Agent Activity Log</p>
         </div>
         <div className="monitor-controls">
           <div className="monitor-filters">
@@ -106,7 +142,9 @@ export default function Monitor() {
               className="monitor-select"
             >
               {AGENTS.map((a) => (
-                <option key={a} value={a}>{a === 'all' ? 'All Agents' : a}</option>
+                <option key={a} value={a}>
+                  {a === 'all' ? 'All Agents' : `${a} (${agentCounts.get(a) || 0})`}
+                </option>
               ))}
             </select>
             <select
@@ -162,7 +200,7 @@ export default function Monitor() {
               Auto-scroll
             </label>
             {lastFetch && (
-              <span className="monitor-last-fetch">
+              <span className="monitor-last-fetch" key={fetchCount}>
                 {isRefreshing ? 'Refreshing…' : lastFetch.toLocaleTimeString()}
               </span>
             )}
@@ -182,10 +220,10 @@ export default function Monitor() {
           <div className="monitor-empty">
             <p>No agent messages found in the selected time range.</p>
             <p className="monitor-empty-hint">
-              Messages appear when Claude agents run sessions locally.
+              Messages appear when agents run sessions locally.
             </p>
             <p className="monitor-empty-hint">
-              Source: ~/.claude/projects/*/&#8203;*.jsonl
+              Sources: Claude sessions, OpenClaw main, Cron runs
             </p>
           </div>
         )}
@@ -200,7 +238,6 @@ export default function Monitor() {
         {filtered.map((entry, i) => {
           const key = `${entry.timestamp}-${entry.sessionId}-${i}`;
           const isExpanded = expandedRows.has(key);
-          // Session separator: show when session changes
           const showSessionSep = entry.sessionId !== lastSession && lastSession !== '';
           lastSession = entry.sessionId;
 
@@ -230,9 +267,20 @@ export default function Monitor() {
 
       <div className="monitor-footer">
         <span>{filtered.length} / {entries.length} entries</span>
+        <span className="monitor-footer-agents">
+          {['Brodie', 'Silver', 'Geo', 'Echo'].map((a) => {
+            const count = agentCounts.get(a) || 0;
+            return count > 0 ? (
+              <span key={a} className="monitor-footer-agent" style={{ color: agentColors[a] }}>
+                {a}: {count}
+              </span>
+            ) : null;
+          })}
+        </span>
         <span>
           {isLive ? `Polling every ${pollInterval}s` : 'Paused'}
           {isRefreshing && ' · Refreshing…'}
+          {` · #${fetchCount}`}
         </span>
       </div>
     </div>
@@ -249,12 +297,19 @@ function LogRow({
   onToggle: () => void;
 }) {
   const color = agentColors[entry.agent] || '#94a3b8';
-  const dirIcon = entry.direction === 'received' ? '→' : '←';
-  const dirLabel = entry.direction === 'received' ? 'IN' : 'OUT';
+  const dirIcon = entry.direction === 'received' ? '→'
+    : entry.direction === 'sent' ? '←'
+    : '◆';
+  const dirLabel = entry.direction === 'received' ? 'IN'
+    : entry.direction === 'sent' ? 'OUT'
+    : 'SYS';
+
+  const sourceLabel = SOURCE_LABELS[entry.source || ''] || '';
+  const statusBad = entry.status === 'error';
 
   return (
     <div
-      className={`monitor-row monitor-dir-${entry.direction} ${entry.truncated ? 'monitor-truncatable' : ''} ${isExpanded ? 'monitor-row-expanded' : ''}`}
+      className={`monitor-row monitor-dir-${entry.direction} ${entry.truncated ? 'monitor-truncatable' : ''} ${isExpanded ? 'monitor-row-expanded' : ''} ${statusBad ? 'monitor-row-error' : ''}`}
       onClick={entry.truncated ? onToggle : undefined}
     >
       <span className="monitor-time">{formatTime(entry.timestamp)}</span>
@@ -264,6 +319,9 @@ function LogRow({
       <span className={`monitor-dir monitor-dir-badge-${entry.direction}`}>
         {dirIcon} {dirLabel}
       </span>
+      {sourceLabel && (
+        <span className="monitor-source">{sourceLabel}</span>
+      )}
       <span className="monitor-project">{entry.project}</span>
       <span className={`monitor-content ${isExpanded ? 'monitor-content-expanded' : ''}`}>
         {entry.content}
@@ -271,6 +329,9 @@ function LogRow({
           <span className="monitor-truncated-badge">…more</span>
         )}
       </span>
+      {entry.status === 'error' && (
+        <span className="monitor-status-badge monitor-status-error">ERR</span>
+      )}
       {entry.stopReason && entry.direction === 'sent' && (
         <span className="monitor-stop-reason">{entry.stopReason}</span>
       )}
