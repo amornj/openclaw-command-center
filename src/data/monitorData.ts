@@ -27,6 +27,14 @@ export interface MonitorEntry {
   source?: string;
   /** Event status: ok, error, running, delivered, unknown */
   status?: string;
+  /** Cron lifecycle stage: started, finished, succeeded, failed, delivered, delivery-failed */
+  lifecycle?: string;
+  /** Duration in milliseconds (for cron jobs) */
+  durationMs?: number;
+  /** Next scheduled run (ISO string, for cron jobs) */
+  nextRun?: string;
+  /** Delivery status string (for cron jobs) */
+  deliveryStatus?: string;
 }
 
 export type MonitorFilter = {

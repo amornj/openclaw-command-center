@@ -52,6 +52,14 @@ export interface MonitorEntry {
   source: string;
   /** Event status: ok, error, running, delivered, unknown */
   status: string;
+  /** Cron lifecycle stage: started, finished, succeeded, failed, delivered, delivery-failed */
+  lifecycle?: string;
+  /** Duration in milliseconds (for cron jobs) */
+  durationMs?: number;
+  /** Next scheduled run (ISO string, for cron jobs) */
+  nextRun?: string;
+  /** Delivery status string (for cron jobs) */
+  deliveryStatus?: string;
 }
 
 // --- Internal message patterns to filter ---
@@ -401,8 +409,10 @@ function getEchoCronMessages(maxAgeMinutes: number, limit: number): MonitorEntry
         const lines = content.split('\n').filter(Boolean);
         const fileEntries: MonitorEntry[] = [];
 
-        // Cron run files can be long; read from end
-        for (let i = lines.length - 1; i >= 0 && fileEntries.length < limit; i--) {
+        // Cron run files can be long; read from end.
+        // Each log entry represents a completed run — we synthesize lifecycle
+        // events (started, finished/succeeded/failed, delivery) from the fields.
+        for (let i = lines.length - 1; i >= 0 && fileEntries.length < limit * 3; i--) {
           try {
             const d = JSON.parse(lines[i]);
             const tsMs = typeof d.ts === 'number' ? d.ts : 0;
@@ -410,40 +420,85 @@ function getEchoCronMessages(maxAgeMinutes: number, limit: number): MonitorEntry
 
             const jobId = d.jobId || basename(jf, '.jsonl');
             const jobName = jobNames.get(jobId) || jobId.slice(0, 8);
-            const action = d.action || 'unknown';
             const runStatus = d.status || 'unknown';
+            const runSessionId = d.sessionId || jobId;
+            const durationMs = typeof d.durationMs === 'number' ? d.durationMs : undefined;
+            const nextRunAtMs = typeof d.nextRunAtMs === 'number' ? d.nextRunAtMs : undefined;
+            const deliverySt = d.deliveryStatus || '';
 
-            // Build content from available fields
             let summary = '';
             if (d.summary) {
-              const { text, truncated: _ } = { text: String(d.summary).slice(0, 300), truncated: String(d.summary).length > 300 };
-              summary = text;
+              summary = String(d.summary).slice(0, 300);
+            }
+            const truncated = summary.length >= 300;
+
+            // --- Event 1: Started (synthesized from runAtMs) ---
+            const runAtMs = typeof d.runAtMs === 'number' ? d.runAtMs : 0;
+            if (runAtMs && runAtMs >= cutoff) {
+              fileEntries.push({
+                timestamp: new Date(runAtMs).toISOString(),
+                agent: 'Echo',
+                direction: 'system',
+                content: `▶ Started: ${jobName}`,
+                project: jobName,
+                sessionId: runSessionId,
+                truncated: false,
+                model: d.model,
+                source: 'cron-run',
+                status: 'running',
+                lifecycle: 'started',
+              });
             }
 
-            const statusLabel = runStatus === 'ok' ? 'ok'
-              : runStatus === 'error' ? 'error'
-              : 'unknown';
+            // --- Event 2: Finished (with outcome) ---
+            const isOk = runStatus === 'ok';
+            const outcomeLifecycle = isOk ? 'succeeded' : 'failed';
+            const outcomeIcon = isOk ? '✓' : '✗';
+            const durationLabel = durationMs ? ` ${(durationMs / 1000).toFixed(1)}s` : '';
 
-            const contentParts: string[] = [`[${action}]`, jobName];
-            if (runStatus !== 'ok') contentParts.push(`(${runStatus})`);
-            if (d.durationMs) contentParts.push(`${Math.round(d.durationMs / 1000)}s`);
-            if (d.deliveryStatus) contentParts.push(`delivery:${d.deliveryStatus}`);
-            if (summary) contentParts.push(`— ${summary}`);
-
-            const truncated = summary.length >= 300;
+            const finishParts: string[] = [`${outcomeIcon} ${isOk ? 'Succeeded' : 'Failed'}: ${jobName}${durationLabel}`];
+            if (d.error) finishParts.push(`— ${String(d.error).slice(0, 150)}`);
+            else if (summary) finishParts.push(`— ${summary}`);
 
             fileEntries.push({
               timestamp: new Date(tsMs).toISOString(),
               agent: 'Echo',
-              direction: action === 'finished' ? 'sent' : 'system',
-              content: contentParts.join(' '),
+              direction: 'sent',
+              content: finishParts.join(' '),
               project: jobName,
-              sessionId: d.sessionId || jobId,
+              sessionId: runSessionId,
               truncated,
               model: d.model,
               source: 'cron-run',
-              status: statusLabel,
+              status: isOk ? 'ok' : 'error',
+              lifecycle: outcomeLifecycle,
+              durationMs,
+              nextRun: nextRunAtMs ? new Date(nextRunAtMs).toISOString() : undefined,
+              deliveryStatus: deliverySt || undefined,
             });
+
+            // --- Event 3: Delivery (only if delivery info present and meaningful) ---
+            if (deliverySt && deliverySt !== 'unknown') {
+              const isDelivered = deliverySt === 'delivered';
+              const deliveryLifecycle = isDelivered ? 'delivered' : 'delivery-failed';
+              const deliveryIcon = isDelivered ? '📨' : '⚠️';
+              // Delivery event timestamp: slightly after finish
+              const deliveryTs = tsMs + 1;
+
+              fileEntries.push({
+                timestamp: new Date(deliveryTs).toISOString(),
+                agent: 'Echo',
+                direction: 'system',
+                content: `${deliveryIcon} ${isDelivered ? 'Delivered' : 'Delivery failed'}: ${jobName}`,
+                project: jobName,
+                sessionId: runSessionId,
+                truncated: false,
+                model: d.model,
+                source: 'cron-run',
+                status: isDelivered ? 'ok' : 'error',
+                lifecycle: deliveryLifecycle,
+              });
+            }
           } catch { continue; }
         }
 

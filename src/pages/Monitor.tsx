@@ -287,6 +287,21 @@ export default function Monitor() {
   );
 }
 
+/** Lifecycle badge styling for Echo cron events */
+const LIFECYCLE_BADGES: Record<string, { label: string; className: string }> = {
+  'started': { label: 'STARTED', className: 'monitor-lifecycle-started' },
+  'succeeded': { label: 'OK', className: 'monitor-lifecycle-succeeded' },
+  'failed': { label: 'FAILED', className: 'monitor-lifecycle-failed' },
+  'delivered': { label: 'DELIVERED', className: 'monitor-lifecycle-delivered' },
+  'delivery-failed': { label: 'DLVR FAIL', className: 'monitor-lifecycle-delivery-failed' },
+};
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
 function LogRow({
   entry,
   isExpanded,
@@ -306,19 +321,27 @@ function LogRow({
 
   const sourceLabel = SOURCE_LABELS[entry.source || ''] || '';
   const statusBad = entry.status === 'error';
+  const lifecycle = entry.lifecycle ? LIFECYCLE_BADGES[entry.lifecycle] : null;
+  const isCron = entry.source === 'cron-run';
 
   return (
     <div
-      className={`monitor-row monitor-dir-${entry.direction} ${entry.truncated ? 'monitor-truncatable' : ''} ${isExpanded ? 'monitor-row-expanded' : ''} ${statusBad ? 'monitor-row-error' : ''}`}
+      className={`monitor-row monitor-dir-${entry.direction} ${entry.truncated ? 'monitor-truncatable' : ''} ${isExpanded ? 'monitor-row-expanded' : ''} ${statusBad ? 'monitor-row-error' : ''} ${isCron ? 'monitor-row-cron' : ''}`}
       onClick={entry.truncated ? onToggle : undefined}
     >
       <span className="monitor-time">{formatTime(entry.timestamp)}</span>
       <span className="monitor-agent" style={{ color }}>
         {entry.agent}
       </span>
-      <span className={`monitor-dir monitor-dir-badge-${entry.direction}`}>
-        {dirIcon} {dirLabel}
-      </span>
+      {lifecycle ? (
+        <span className={`monitor-dir monitor-lifecycle-badge ${lifecycle.className}`}>
+          {lifecycle.label}
+        </span>
+      ) : (
+        <span className={`monitor-dir monitor-dir-badge-${entry.direction}`}>
+          {dirIcon} {dirLabel}
+        </span>
+      )}
       {sourceLabel && (
         <span className="monitor-source">{sourceLabel}</span>
       )}
@@ -329,7 +352,15 @@ function LogRow({
           <span className="monitor-truncated-badge">…more</span>
         )}
       </span>
-      {entry.status === 'error' && (
+      {isCron && entry.durationMs != null && entry.lifecycle === 'succeeded' && (
+        <span className="monitor-duration-badge">{formatDuration(entry.durationMs)}</span>
+      )}
+      {isCron && entry.nextRun && entry.lifecycle === 'succeeded' && (
+        <span className="monitor-next-run" title={`Next: ${entry.nextRun}`}>
+          ⏭ {new Date(entry.nextRun).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </span>
+      )}
+      {entry.status === 'error' && !lifecycle && (
         <span className="monitor-status-badge monitor-status-error">ERR</span>
       )}
       {entry.stopReason && entry.direction === 'sent' && (

@@ -1799,6 +1799,62 @@ h2 {
   border-left: 2px solid #f87171;
 }
 
+/* Cron lifecycle badges */
+.monitor-lifecycle-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.monitor-lifecycle-started {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+}
+.monitor-lifecycle-succeeded {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.15);
+}
+.monitor-lifecycle-failed {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.15);
+}
+.monitor-lifecycle-delivered {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.15);
+}
+.monitor-lifecycle-delivery-failed {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.15);
+}
+
+/* Duration and next-run metadata badges */
+.monitor-duration-badge {
+  font-size: 9px;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.monitor-next-run {
+  font-size: 9px;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Cron row subtle left accent */
+.monitor-row-cron {
+  border-left: 2px solid rgba(251, 191, 36, 0.25);
+}
+.monitor-row-cron.monitor-row-error {
+  border-left: 2px solid #f87171;
+}
+
 /* Footer agent counts */
 .monitor-footer-agents {
   display: flex;
