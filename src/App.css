@@ -116,6 +116,143 @@ h2 {
 }
 
 /* === ORG CHART === */
+
+/* Title row with source badge */
+.org-chart-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+}
+
+.org-chart-title-row h2 {
+  margin-bottom: 4px;
+}
+
+.org-chart-title-row .subtitle {
+  margin-bottom: 0;
+}
+
+.activity-source-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.activity-source-badge.live {
+  background: #10b98120;
+  color: #10b981;
+}
+
+.activity-source-badge.inferred {
+  background: #818cf820;
+  color: #818cf8;
+}
+
+.activity-source-badge.estimated {
+  background: #64748b20;
+  color: #64748b;
+}
+
+/* Breathing animation for active agents */
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 var(--agent-color-glow, rgba(99, 102, 241, 0)); }
+  50% { box-shadow: 0 0 16px 2px var(--agent-color-glow, rgba(99, 102, 241, 0.15)); }
+}
+
+@keyframes dot-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.agent-card.agent-active {
+  --agent-color-glow: var(--agent-color);
+  animation: breathe 3s ease-in-out infinite;
+  border-color: color-mix(in srgb, var(--agent-color) 30%, #1e2035);
+}
+
+/* Agent name row with status dot */
+.agent-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.active {
+  background: #10b981;
+  animation: dot-breathe 2s ease-in-out infinite;
+}
+
+.status-dot.standby {
+  background: #f59e0b;
+}
+
+.status-dot.idle {
+  background: #475569;
+}
+
+/* Activity section */
+.agent-activity-section {
+  background: #0f111720;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  min-height: 42px;
+}
+
+.agent-task {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.task-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #10b981;
+  text-transform: uppercase;
+}
+
+.task-text {
+  font-size: 12px;
+  color: #e2e8f0;
+  line-height: 1.4;
+}
+
+.agent-idle-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.idle-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.idle-time {
+  font-size: 11px;
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.agent-detail {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
 .org-tree {
   display: flex;
   flex-direction: column;
