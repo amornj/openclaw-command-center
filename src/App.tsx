@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import OrgChart from './pages/OrgChart';
 import Calendar from './pages/Calendar';
+import CronTracker from './pages/CronTracker';
 import './App.css';
 
 function App() {
@@ -24,15 +25,20 @@ function App() {
               <span className="nav-icon">📅</span>
               Calendar
             </NavLink>
+            <NavLink to="/cron">
+              <span className="nav-icon">⏱</span>
+              Cron Tracker
+            </NavLink>
           </div>
           <div className="nav-footer">
-            <span>v1.0.0</span>
+            <span>v1.1.0</span>
           </div>
         </nav>
         <main className="content">
           <Routes>
             <Route path="/" element={<OrgChart />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/cron" element={<CronTracker />} />
           </Routes>
         </main>
       </div>
