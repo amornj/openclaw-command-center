@@ -134,12 +134,15 @@ function AgentCard({
               {status === 'standby' ? 'Standby' : 'Idle'}
             </span>
             {activity?.lastActiveAt && (
-              <span className="idle-time">{timeAgo(activity.lastActiveAt)}</span>
+              <span className="idle-time">Last active {timeAgo(activity.lastActiveAt)}</span>
             )}
           </div>
         )}
         {activity?.detail && (
-          <div className="agent-detail">{activity.detail}</div>
+          <div className="agent-detail">
+            {activity.source === 'estimated' && '⚬ '}
+            {activity.detail}
+          </div>
         )}
       </div>
 

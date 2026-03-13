@@ -26,17 +26,16 @@ export interface AgentActivity {
 /** Try to detect Silver's activity from the local Claude Code session */
 function detectSilverActivity(): AgentActivity {
   const now = new Date();
-  // Silver is the agent running right now if this dashboard is being actively developed.
-  // Heuristic: if the page loaded within the last 2 minutes, Silver likely just pushed code.
-  // For a true live signal, we'd check for a running `claude` process or session lock.
-  // For now, mark as active during development and inferred otherwise.
+  // Without a live backend signal, we cannot confirm Silver is active.
+  // Default to idle — the live API path (Phase 1) will override this
+  // when a real backend is available.
   return {
     agentId: 'silver',
-    status: 'active',
-    currentTask: 'Implementing Org Chart activity indicators',
-    lastActiveAt: now.toISOString(),
-    source: 'inferred',
-    detail: 'Claude Code session detected',
+    status: 'idle',
+    currentTask: null,
+    lastActiveAt: new Date(now.getTime() - 30 * 60_000).toISOString(),
+    source: 'estimated',
+    detail: 'No live session detected',
   };
 }
 
@@ -143,7 +142,7 @@ function estimateGeoActivity(): AgentActivity {
 
   return {
     agentId: 'geo',
-    status: isWorkingHours ? 'idle' : 'idle',
+    status: isWorkingHours ? 'idle' : 'standby',
     currentTask: null,
     lastActiveAt: new Date(
       now.getTime() - (isWorkingHours ? 25 * 60_000 : 4 * 3_600_000)
