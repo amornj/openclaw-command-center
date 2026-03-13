@@ -1,0 +1,409 @@
+import type { Plugin } from 'vite';
+import { readdirSync, readFileSync, statSync, existsSync } from 'fs';
+import { join, basename } from 'path';
+import { execSync } from 'child_process';
+
+const CLAUDE_DIR = join(process.env.HOME || '/Users/home', '.claude');
+const PROJECTS_DIR = join(CLAUDE_DIR, 'projects');
+
+
+/** Map project directory encoded names back to readable names */
+function decodeProjectDir(encoded: string): string {
+  return encoded.replace(/^-/, '/').replace(/-/g, '/');
+}
+
+/** Extract a short project name from a decoded path */
+function shortProjectName(decoded: string): string {
+  const parts = decoded.split('/').filter(Boolean);
+  return parts[parts.length - 1] || decoded;
+}
+
+interface MonitorEntry {
+  timestamp: string;
+  agent: string;
+  direction: 'received' | 'sent' | 'system';
+  content: string;
+  project: string;
+  sessionId: string;
+}
+
+/** Scan JSONL session files for recent messages */
+function getRecentMessages(maxAgeMinutes = 60, limit = 200): MonitorEntry[] {
+  const entries: MonitorEntry[] = [];
+  const cutoff = Date.now() - maxAgeMinutes * 60_000;
+
+  if (!existsSync(PROJECTS_DIR)) return entries;
+
+  try {
+    const projectDirs = readdirSync(PROJECTS_DIR, { withFileTypes: true });
+
+    for (const pd of projectDirs) {
+      if (!pd.isDirectory()) continue;
+      const projPath = join(PROJECTS_DIR, pd.name);
+      const projName = shortProjectName(decodeProjectDir(pd.name));
+
+      let jsonlFiles: string[];
+      try {
+        jsonlFiles = readdirSync(projPath)
+          .filter((f) => f.endsWith('.jsonl') && !f.includes('/'));
+      } catch {
+        continue;
+      }
+
+      for (const jf of jsonlFiles) {
+        const filePath = join(projPath, jf);
+        try {
+          const stat = statSync(filePath);
+          // Skip files not modified recently
+          if (stat.mtimeMs < cutoff) continue;
+
+          const content = readFileSync(filePath, 'utf-8');
+          const lines = content.split('\n').filter(Boolean);
+          const sessionId = basename(jf, '.jsonl');
+
+          // Only process recent lines (read from end for efficiency)
+          for (let i = lines.length - 1; i >= 0 && entries.length < limit * 3; i--) {
+            try {
+              const d = JSON.parse(lines[i]);
+              const ts = d.timestamp;
+              let tsMs: number;
+
+              if (typeof ts === 'string') {
+                tsMs = new Date(ts).getTime();
+              } else if (typeof ts === 'number') {
+                tsMs = ts;
+              } else {
+                continue;
+              }
+
+              if (tsMs < cutoff) break; // older entries, stop
+
+              if (d.type === 'user' && !d.isMeta) {
+                const msg = d.message;
+                let text = '';
+                if (typeof msg === 'string') {
+                  text = msg;
+                } else if (msg?.content) {
+                  if (typeof msg.content === 'string') {
+                    text = msg.content;
+                  } else if (Array.isArray(msg.content)) {
+                    for (const block of msg.content) {
+                      if (block?.type === 'text' && block.text) {
+                        text = block.text;
+                        break;
+                      }
+                    }
+                  }
+                }
+                // Strip system tags
+                text = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+                text = text.replace(/<local-command-caveat>[\s\S]*?<\/local-command-caveat>/g, '').trim();
+                if (!text || text.length < 3) continue;
+
+                entries.push({
+                  timestamp: new Date(tsMs).toISOString(),
+                  agent: inferAgentFromProject(projName, d),
+                  direction: 'received',
+                  content: text.slice(0, 500),
+                  project: projName,
+                  sessionId,
+                });
+              } else if (d.type === 'assistant') {
+                const msg = d.message;
+                let text = '';
+                if (msg?.content) {
+                  if (typeof msg.content === 'string') {
+                    text = msg.content;
+                  } else if (Array.isArray(msg.content)) {
+                    const parts: string[] = [];
+                    for (const block of msg.content) {
+                      if (block?.type === 'text' && block.text) {
+                        parts.push(block.text);
+                      } else if (block?.type === 'tool_use') {
+                        parts.push(`[Tool: ${block.name}]`);
+                      }
+                    }
+                    text = parts.join(' ').trim();
+                  }
+                }
+                if (!text || text.length < 2) continue;
+
+                entries.push({
+                  timestamp: new Date(tsMs).toISOString(),
+                  agent: inferAgentFromProject(projName, d),
+                  direction: 'sent',
+                  content: text.slice(0, 500),
+                  project: projName,
+                  sessionId,
+                });
+              }
+            } catch {
+              continue;
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+  } catch {
+    // PROJECTS_DIR read error
+  }
+
+  // Sort by timestamp descending
+  entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return entries.slice(0, limit);
+}
+
+/** Infer which agent produced a session based on project context */
+function inferAgentFromProject(projName: string, entry: Record<string, unknown>): string {
+  const slug = String(entry.slug || '');
+  const cwd = String(entry.cwd || '');
+
+  // ACP sessions via openclaw are Silver (Claude coding agent)
+  if (slug.includes('acp') || slug.includes('claude')) return 'Silver';
+  if (cwd.includes('openclaw-command-center')) return 'Silver';
+
+  // claude-mem observer sessions
+  if (projName.includes('claude-mem')) return 'Geo';
+
+  // Default heuristic: Claude sessions = Silver unless identifiable otherwise
+  return 'Silver';
+}
+
+interface AgentLiveStatus {
+  agentId: string;
+  isActive: boolean;
+  lastSeenAt: string | null;
+  currentProject: string | null;
+  currentTask: string | null;
+  source: 'live';
+}
+
+/** Detect actual agent activity from processes and file timestamps */
+function detectLiveAgentActivity(): AgentLiveStatus[] {
+  const results: AgentLiveStatus[] = [];
+  const now = Date.now();
+
+  // --- Silver: check for active Claude Code CLI processes ---
+  let silverActive = false;
+  let silverProject: string | null = null;
+  let silverLastSeen: string | null = null;
+
+  try {
+    const ps = execSync(
+      'ps aux | grep -E "claude.*--output-format|acpx.*claude" | grep -v grep',
+      { encoding: 'utf-8', timeout: 3000 }
+    ).trim();
+
+    if (ps) {
+      silverActive = true;
+      // Try to extract project from --cwd flag
+      const cwdMatch = ps.match(/--cwd\s+(\S+)/);
+      if (cwdMatch) {
+        silverProject = shortProjectName(cwdMatch[1]);
+      }
+      silverLastSeen = new Date().toISOString();
+    }
+  } catch {
+    // No matching process
+  }
+
+  // Also check recent session JSONL files for Silver
+  if (!silverActive) {
+    try {
+      const recent = findMostRecentJsonl();
+      if (recent && now - recent.mtimeMs < 5 * 60_000) {
+        // File modified in last 5 minutes - session was recently active
+        silverLastSeen = new Date(recent.mtimeMs).toISOString();
+        silverProject = recent.project;
+      }
+    } catch { /* ignore */ }
+  }
+
+  results.push({
+    agentId: 'silver',
+    isActive: silverActive,
+    lastSeenAt: silverLastSeen,
+    currentProject: silverProject,
+    currentTask: silverActive ? `Working on ${silverProject || 'project'}` : null,
+    source: 'live',
+  });
+
+  // --- Geo: check for Claude research sessions ---
+  // Geo would show up as a separate Claude process or in specific project dirs
+  let geoActive = false;
+  let geoLastSeen: string | null = null;
+  try {
+    const ps = execSync(
+      'ps aux | grep -E "claude.*sonnet" | grep -v grep',
+      { encoding: 'utf-8', timeout: 3000 }
+    ).trim();
+    if (ps) {
+      geoActive = true;
+      geoLastSeen = new Date().toISOString();
+    }
+  } catch { /* ignore */ }
+
+  // Check claude-mem observer sessions for Geo activity
+  if (!geoActive) {
+    try {
+      const memDir = join(PROJECTS_DIR, '-Users-home--claude-mem-observer-sessions');
+      if (existsSync(memDir)) {
+        const files = readdirSync(memDir).filter((f) => f.endsWith('.jsonl'));
+        for (const f of files) {
+          const stat = statSync(join(memDir, f));
+          if (now - stat.mtimeMs < 5 * 60_000) {
+            geoLastSeen = new Date(stat.mtimeMs).toISOString();
+            break;
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  results.push({
+    agentId: 'geo',
+    isActive: geoActive,
+    lastSeenAt: geoLastSeen,
+    currentProject: null,
+    currentTask: geoActive ? 'Research / writing session' : null,
+    source: 'live',
+  });
+
+  // --- Echo: check for cron-related processes or recent cron output ---
+  let echoActive = false;
+  let echoLastSeen: string | null = null;
+  let echoTask: string | null = null;
+
+  // Echo runs via openclaw cron - check for active openclaw cron processes
+  try {
+    const ps = execSync(
+      'ps aux | grep -E "openclaw.*cron|echo.*cron" | grep -v grep',
+      { encoding: 'utf-8', timeout: 3000 }
+    ).trim();
+    if (ps) {
+      echoActive = true;
+      echoLastSeen = new Date().toISOString();
+      echoTask = 'Executing cron job';
+    }
+  } catch { /* ignore */ }
+
+  // Fallback: check cron schedule windows
+  if (!echoActive) {
+    const hour = new Date().getHours();
+    const minute = new Date().getMinutes();
+    const activeWindows = [6, 7, 8, 12, 18, 22];
+    const isInWindow = activeWindows.some((h) => hour === h && minute < 15);
+    if (isInWindow) {
+      echoActive = true;
+      echoLastSeen = new Date().toISOString();
+      const taskMap: Record<number, string> = {
+        6: 'Running morning briefing digest',
+        7: 'Executing medical research scan',
+        8: 'Processing financial monitoring',
+        12: 'Running midday summary',
+        18: 'Executing evening portfolio check',
+        22: 'Running end-of-day reports',
+      };
+      echoTask = taskMap[hour] ?? 'Executing scheduled cron job';
+    }
+  }
+
+  results.push({
+    agentId: 'echo',
+    isActive: echoActive,
+    lastSeenAt: echoLastSeen,
+    currentProject: null,
+    currentTask: echoTask,
+    source: 'live',
+  });
+
+  // --- Brodie: active when any other agent is active ---
+  const anyActive = results.some((r) => r.isActive);
+  const activeNames = results.filter((r) => r.isActive).map((r) =>
+    r.agentId.charAt(0).toUpperCase() + r.agentId.slice(1)
+  );
+
+  results.push({
+    agentId: 'brodie',
+    isActive: anyActive,
+    lastSeenAt: anyActive ? new Date().toISOString() : results.reduce(
+      (latest, r) => (r.lastSeenAt && r.lastSeenAt > (latest || '')) ? r.lastSeenAt : latest,
+      null as string | null
+    ),
+    currentProject: null,
+    currentTask: anyActive ? `Coordinating ${activeNames.join(', ')}` : null,
+    source: 'live',
+  });
+
+  return results;
+}
+
+/** Find the most recently modified JSONL in any project session dir */
+function findMostRecentJsonl(): { path: string; mtimeMs: number; project: string } | null {
+  if (!existsSync(PROJECTS_DIR)) return null;
+
+  let best: { path: string; mtimeMs: number; project: string } | null = null;
+
+  try {
+    const dirs = readdirSync(PROJECTS_DIR, { withFileTypes: true });
+    for (const d of dirs) {
+      if (!d.isDirectory()) continue;
+      const dirPath = join(PROJECTS_DIR, d.name);
+      try {
+        const files = readdirSync(dirPath).filter((f) => f.endsWith('.jsonl') && !f.includes('/'));
+        for (const f of files) {
+          const fp = join(dirPath, f);
+          const stat = statSync(fp);
+          if (!best || stat.mtimeMs > best.mtimeMs) {
+            best = {
+              path: fp,
+              mtimeMs: stat.mtimeMs,
+              project: shortProjectName(decodeProjectDir(d.name)),
+            };
+          }
+        }
+      } catch { continue; }
+    }
+  } catch { /* ignore */ }
+
+  return best;
+}
+
+export default function monitorPlugin(): Plugin {
+  return {
+    name: 'vite-plugin-monitor',
+    configureServer(server) {
+      // Live agent activity endpoint
+      server.middlewares.use('/api/agents/activity', (_req, res) => {
+        try {
+          const activity = detectLiveAgentActivity();
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(activity));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
+
+      // Monitor messages endpoint
+      server.middlewares.use('/api/monitor/messages', (req, res) => {
+        try {
+          const url = new URL(req.url || '/', 'http://localhost');
+          const maxAge = parseInt(url.searchParams.get('maxAge') || '60', 10);
+          const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+          const messages = getRecentMessages(
+            Math.min(maxAge, 1440),
+            Math.min(limit, 500)
+          );
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(messages));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
+    },
+  };
+}

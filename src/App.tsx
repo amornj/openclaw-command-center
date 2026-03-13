@@ -4,6 +4,7 @@ import Calendar from './pages/Calendar';
 import CronTracker from './pages/CronTracker';
 import Usage from './pages/Usage';
 import Projects from './pages/Projects';
+import Monitor from './pages/Monitor';
 import './App.css';
 
 function App() {
@@ -39,9 +40,13 @@ function App() {
               <span className="nav-icon">📁</span>
               Projects
             </NavLink>
+            <NavLink to="/monitor">
+              <span className="nav-icon">📡</span>
+              Monitor
+            </NavLink>
           </div>
           <div className="nav-footer">
-            <span>v1.4.0</span>
+            <span>v1.5.0</span>
           </div>
         </nav>
         <main className="content">
@@ -51,6 +56,7 @@ function App() {
             <Route path="/cron" element={<CronTracker />} />
             <Route path="/usage" element={<Usage />} />
             <Route path="/projects" element={<Projects />} />
+            <Route path="/monitor" element={<Monitor />} />
           </Routes>
         </main>
       </div>

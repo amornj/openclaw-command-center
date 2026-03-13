@@ -1480,3 +1480,238 @@ h2 {
   color: #475569;
   font-size: 14px;
 }
+
+/* === MONITOR PAGE === */
+.monitor-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 32px);
+  padding: 24px;
+  gap: 0;
+}
+
+.monitor-header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.monitor-header h2 {
+  margin: 0 0 2px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.monitor-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.monitor-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.monitor-select {
+  background: #1e2035;
+  border: 1px solid #2a2d45;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.monitor-select:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.monitor-search {
+  background: #1e2035;
+  border: 1px solid #2a2d45;
+  color: #e2e8f0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.monitor-search::placeholder {
+  color: #475569;
+}
+
+.monitor-search:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.monitor-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.monitor-live-btn {
+  background: #1e2035;
+  border: 1px solid #2a2d45;
+  color: #94a3b8;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.monitor-live-btn.active {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #22c55e;
+}
+
+.monitor-autoscroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.monitor-autoscroll input {
+  cursor: pointer;
+}
+
+.monitor-last-fetch {
+  color: #475569;
+}
+
+/* Log container */
+.monitor-log {
+  flex: 1;
+  overflow-y: auto;
+  background: #0c0e14;
+  border: 1px solid #1e2035;
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 4px 0;
+}
+
+.monitor-log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.monitor-log::-webkit-scrollbar-thumb {
+  background: #2a2d45;
+  border-radius: 3px;
+}
+
+.monitor-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #475569;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+}
+
+.monitor-empty p {
+  margin: 4px 0;
+}
+
+.monitor-empty-hint {
+  font-size: 11px;
+  color: #334155;
+}
+
+/* Log rows */
+.monitor-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 3px 12px;
+  border-bottom: 1px solid #111318;
+  transition: background 0.15s;
+}
+
+.monitor-row:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.monitor-time {
+  flex-shrink: 0;
+  width: 72px;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitor-agent {
+  flex-shrink: 0;
+  width: 60px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.monitor-dir {
+  flex-shrink: 0;
+  width: 48px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 0;
+}
+
+.monitor-dir-badge-received {
+  color: #60a5fa;
+}
+
+.monitor-dir-badge-sent {
+  color: #34d399;
+}
+
+.monitor-project {
+  flex-shrink: 0;
+  width: 130px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.monitor-content {
+  flex: 1;
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.monitor-dir-received .monitor-content {
+  color: #94a3b8;
+}
+
+.monitor-dir-sent .monitor-content {
+  color: #d1d5db;
+}
+
+/* Footer */
+.monitor-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0 0;
+  font-size: 11px;
+  color: #475569;
+}

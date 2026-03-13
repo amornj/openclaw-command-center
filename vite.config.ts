@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import projectsPlugin from './vite-plugin-projects'
+import monitorPlugin from './vite-plugin-monitor'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), projectsPlugin()],
+  plugins: [react(), projectsPlugin(), monitorPlugin()],
   server: {
     host: 'localhost',
     port: 3000,

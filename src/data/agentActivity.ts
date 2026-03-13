@@ -2,12 +2,14 @@
  * Agent activity tracking for OpenClaw Command Center.
  *
  * Data source priority:
- *   1. Live detection — checks local signals (Claude Code sessions, process markers)
- *   2. Inferred — derives Echo's status from cron job schedules
+ *   1. Live detection — /api/agents/activity checks real processes + session files
+ *   2. Inferred — schedule-based for Echo
  *   3. Fallback — clean structured estimates, clearly labeled
  *
- * When live detection is not feasible, all fields are still populated
- * with plausible defaults so the UI never shows blank cards.
+ * The Org Chart bug (agents falsely showing active or stale tasks) was caused by:
+ *   - No live backend existed, so the live fetch always failed
+ *   - Fallback functions used optimistic heuristics that returned stale/wrong states
+ *   - Now the Vite plugin provides real process + filesystem detection
  */
 
 export type ActivityStatus = 'active' | 'idle' | 'standby';
@@ -23,34 +25,96 @@ export interface AgentActivity {
   detail: string | null;
 }
 
-/** Try to detect Silver's activity from the local Claude Code session */
-function detectSilverActivity(): AgentActivity {
+/** Shape returned by the Vite plugin /api/agents/activity */
+interface LiveStatus {
+  agentId: string;
+  isActive: boolean;
+  lastSeenAt: string | null;
+  currentProject: string | null;
+  currentTask: string | null;
+  source: 'live';
+}
+
+/** Convert live process detection to UI-ready AgentActivity */
+function liveToActivity(live: LiveStatus): AgentActivity {
   const now = new Date();
-  // Without a live backend signal, we cannot confirm Silver is active.
-  // Default to idle — the live API path (Phase 1) will override this
-  // when a real backend is available.
+
+  if (live.isActive) {
+    return {
+      agentId: live.agentId,
+      status: 'active',
+      currentTask: live.currentTask,
+      lastActiveAt: live.lastSeenAt || now.toISOString(),
+      source: 'live',
+      detail: live.currentProject ? `Project: ${live.currentProject}` : null,
+    };
+  }
+
+  // Not active — determine idle vs standby
+  const lastSeen = live.lastSeenAt ? new Date(live.lastSeenAt).getTime() : 0;
+  const minutesSince = lastSeen ? (Date.now() - lastSeen) / 60_000 : Infinity;
+
+  return {
+    agentId: live.agentId,
+    status: minutesSince < 30 ? 'idle' : 'standby',
+    currentTask: null,
+    lastActiveAt: live.lastSeenAt || new Date(now.getTime() - 60 * 60_000).toISOString(),
+    source: 'live',
+    detail: lastSeen
+      ? `Last seen ${timeAgo(live.lastSeenAt!)}`
+      : 'No recent activity detected',
+  };
+}
+
+/**
+ * Fetch activity for all agents.
+ * Prefers live data from the Vite plugin; falls back to local inference.
+ */
+export async function fetchAgentActivity(): Promise<AgentActivity[]> {
+  // Try live API — served by vite-plugin-monitor
+  try {
+    const resp = await fetch('/api/agents/activity', {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (resp.ok) {
+      const liveData = (await resp.json()) as LiveStatus[];
+      if (Array.isArray(liveData) && liveData.length > 0) {
+        return liveData.map(liveToActivity);
+      }
+    }
+  } catch {
+    // No live backend — fall through to inference
+  }
+
+  // Fallback: local inference (conservative — prefer idle over false active)
+  const silver = fallbackSilver();
+  const echo = fallbackEcho();
+  const geo = fallbackGeo();
+  const brodie = fallbackBrodie([silver, echo, geo]);
+
+  return [brodie, silver, geo, echo];
+}
+
+// --- Fallback functions (used only when live API is unavailable) ---
+
+function fallbackSilver(): AgentActivity {
   return {
     agentId: 'silver',
     status: 'idle',
     currentTask: null,
-    lastActiveAt: new Date(now.getTime() - 30 * 60_000).toISOString(),
+    lastActiveAt: new Date(Date.now() - 30 * 60_000).toISOString(),
     source: 'estimated',
-    detail: 'No live session detected',
+    detail: 'Live detection unavailable',
   };
 }
 
-/** Infer Echo's activity from current time vs cron schedule */
-function inferEchoActivity(): AgentActivity {
+function fallbackEcho(): AgentActivity {
   const now = new Date();
   const hour = now.getHours();
   const minute = now.getMinutes();
 
-  // Echo runs scheduled jobs — check if any are likely running now
-  // Key schedule times: 06:00, 07:00, 08:00, 12:00, 18:00, 22:00
   const activeWindows = [6, 7, 8, 12, 18, 22];
-  const isInWindow = activeWindows.some(
-    (h) => hour === h && minute < 15
-  );
+  const isInWindow = activeWindows.some((h) => hour === h && minute < 15);
 
   if (isInWindow) {
     const taskMap: Record<number, string> = {
@@ -71,12 +135,7 @@ function inferEchoActivity(): AgentActivity {
     };
   }
 
-  // Find next scheduled window
   const nextWindow = activeWindows.find((h) => h > hour) ?? activeWindows[0];
-  const nextRun = new Date(now);
-  nextRun.setHours(nextWindow, 0, 0, 0);
-  if (nextWindow <= hour) nextRun.setDate(nextRun.getDate() + 1);
-
   return {
     agentId: 'echo',
     status: 'standby',
@@ -92,7 +151,7 @@ function getLastCronRun(now: Date, windows: number[]): string {
   const lastWindow = [...windows].reverse().find((h) => h < hour);
   const d = new Date(now);
   if (lastWindow !== undefined) {
-    d.setHours(lastWindow, 14, 0, 0); // ~14 min into the window
+    d.setHours(lastWindow, 14, 0, 0);
   } else {
     d.setDate(d.getDate() - 1);
     d.setHours(windows[windows.length - 1], 14, 0, 0);
@@ -100,8 +159,24 @@ function getLastCronRun(now: Date, windows: number[]): string {
   return d.toISOString();
 }
 
-/** Brodie orchestrates — active when any other agent is active */
-function deriveBrodieActivity(others: AgentActivity[]): AgentActivity {
+function fallbackGeo(): AgentActivity {
+  const now = new Date();
+  const hour = now.getHours();
+  const isWorkingHours = hour >= 9 && hour <= 21;
+
+  return {
+    agentId: 'geo',
+    status: isWorkingHours ? 'idle' : 'standby',
+    currentTask: null,
+    lastActiveAt: new Date(
+      now.getTime() - (isWorkingHours ? 25 * 60_000 : 4 * 3_600_000)
+    ).toISOString(),
+    source: 'estimated',
+    detail: isWorkingHours ? 'Available for research tasks' : 'Off-hours standby',
+  };
+}
+
+function fallbackBrodie(others: AgentActivity[]): AgentActivity {
   const anyActive = others.some((a) => a.status === 'active');
   const now = new Date();
 
@@ -130,53 +205,6 @@ function deriveBrodieActivity(others: AgentActivity[]): AgentActivity {
     source: 'inferred',
     detail: 'Monitoring agent pool',
   };
-}
-
-/** Geo's activity — research tasks are ad-hoc, not scheduled */
-function estimateGeoActivity(): AgentActivity {
-  const now = new Date();
-  const hour = now.getHours();
-
-  // Geo tends to be active during working hours for research tasks
-  const isWorkingHours = hour >= 9 && hour <= 21;
-
-  return {
-    agentId: 'geo',
-    status: isWorkingHours ? 'idle' : 'standby',
-    currentTask: null,
-    lastActiveAt: new Date(
-      now.getTime() - (isWorkingHours ? 25 * 60_000 : 4 * 3_600_000)
-    ).toISOString(),
-    source: 'estimated',
-    detail: isWorkingHours ? 'Available for research tasks' : 'Off-hours standby',
-  };
-}
-
-/**
- * Fetch activity for all agents.
- * Returns one AgentActivity per known agent.
- */
-export async function fetchAgentActivity(): Promise<AgentActivity[]> {
-  // Phase 1: try live API (future — local bridge at /api/agents/activity)
-  try {
-    const resp = await fetch('/api/agents/activity', {
-      signal: AbortSignal.timeout(1500),
-    });
-    if (resp.ok) {
-      const data = (await resp.json()) as AgentActivity[];
-      return data.map((a) => ({ ...a, source: 'live' as ActivitySource }));
-    }
-  } catch {
-    // No live backend — fall through to inference
-  }
-
-  // Phase 2: local inference and estimation
-  const silver = detectSilverActivity();
-  const echo = inferEchoActivity();
-  const geo = estimateGeoActivity();
-  const brodie = deriveBrodieActivity([silver, echo, geo]);
-
-  return [brodie, silver, geo, echo];
 }
 
 /** Human-readable time-ago string */
