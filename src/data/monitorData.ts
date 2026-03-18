@@ -147,6 +147,8 @@ export const agentColors: Record<string, string> = {
   Brodie: '#60a5fa',
   Geo: '#34d399',
   Echo: '#fbbf24',
+  Harvey: '#f59e0b',
+  Hunter: '#ec4899',
 };
 
 /** Map agent status to health class for consistent visual treatment */

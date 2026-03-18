@@ -178,6 +178,17 @@ function inferAgentFromProject(projName: string, entry: Record<string, unknown>,
   return 'Silver';
 }
 
+/** Map cron job model to agent name */
+function inferAgentFromCronModel(model?: string): string {
+  if (!model) return 'Echo';
+  const m = String(model).toLowerCase();
+  if (m.includes('minimax')) return 'Harvey';
+  if (m.includes('gemini-3-pro') || m.includes('image-preview')) return 'Hunter';
+  if (m.includes('gemini')) return 'Echo';
+  if (m.includes('claude') || m.includes('anthropic')) return 'Brodie';
+  return 'Echo';
+}
+
 // =========================================================================
 // Data source 1: Claude session JSONL files (Silver, Geo)
 // =========================================================================
@@ -425,6 +436,7 @@ function getEchoCronMessages(maxAgeMinutes: number, limit: number): MonitorEntry
             const durationMs = typeof d.durationMs === 'number' ? d.durationMs : undefined;
             const nextRunAtMs = typeof d.nextRunAtMs === 'number' ? d.nextRunAtMs : undefined;
             const deliverySt = d.deliveryStatus || '';
+            const cronAgent = inferAgentFromCronModel(d.model);
 
             let summary = '';
             if (d.summary) {
@@ -437,7 +449,7 @@ function getEchoCronMessages(maxAgeMinutes: number, limit: number): MonitorEntry
             if (runAtMs && runAtMs >= cutoff) {
               fileEntries.push({
                 timestamp: new Date(runAtMs).toISOString(),
-                agent: 'Echo',
+                agent: cronAgent,
                 direction: 'system',
                 content: `▶ Started: ${jobName}`,
                 project: jobName,
@@ -462,7 +474,7 @@ function getEchoCronMessages(maxAgeMinutes: number, limit: number): MonitorEntry
 
             fileEntries.push({
               timestamp: new Date(tsMs).toISOString(),
-              agent: 'Echo',
+              agent: cronAgent,
               direction: 'sent',
               content: finishParts.join(' '),
               project: jobName,
@@ -487,7 +499,7 @@ function getEchoCronMessages(maxAgeMinutes: number, limit: number): MonitorEntry
 
               fileEntries.push({
                 timestamp: new Date(deliveryTs).toISOString(),
-                agent: 'Echo',
+                agent: cronAgent,
                 direction: 'system',
                 content: `${deliveryIcon} ${isDelivered ? 'Delivered' : 'Delivery failed'}: ${jobName}`,
                 project: jobName,
@@ -723,6 +735,25 @@ function detectLiveAgentActivity(): AgentLiveStatus[] {
   });
 
   // --- Brodie ---
+  // Add Harvey and Hunter (on-demand agents, show standby unless cron detected activity)
+  results.push({
+    agentId: 'harvey',
+    isActive: false,
+    lastSeenAt: null,
+    currentProject: null,
+    currentTask: null,
+    source: 'live',
+  });
+
+  results.push({
+    agentId: 'hunter',
+    isActive: false,
+    lastSeenAt: null,
+    currentProject: null,
+    currentTask: null,
+    source: 'live',
+  });
+
   const anyActive = results.some((r) => r.isActive);
   const activeNames = results.filter((r) => r.isActive).map((r) =>
     r.agentId.charAt(0).toUpperCase() + r.agentId.slice(1)

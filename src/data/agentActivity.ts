@@ -138,9 +138,11 @@ export async function fetchAgentActivity(): Promise<AgentActivity[]> {
   const silver = fallbackSilver();
   const echo = fallbackEcho();
   const geo = fallbackGeo();
-  const brodie = fallbackBrodie([silver, echo, geo]);
+  const harvey = fallbackHarvey();
+  const hunter = fallbackHunter();
+  const brodie = fallbackBrodie([silver, echo, geo, harvey, hunter]);
 
-  return [brodie, silver, geo, echo];
+  return [brodie, silver, geo, echo, harvey, hunter];
 }
 
 // --- Fallback functions (used only when live API is unavailable) ---
@@ -233,6 +235,30 @@ function fallbackGeo(): AgentActivity {
     source: 'estimated',
     detail: isWorkingHours ? 'Available for research tasks' : 'Off-hours standby',
     healthClass: computeHealthClass(status),
+  };
+}
+
+function fallbackHarvey(): AgentActivity {
+  return {
+    agentId: 'harvey',
+    status: 'standby',
+    currentTask: null,
+    lastActiveAt: new Date(Date.now() - 24 * 3_600_000).toISOString(),
+    source: 'estimated',
+    detail: 'On-demand: code review & secondary coding',
+    healthClass: 'ok',
+  };
+}
+
+function fallbackHunter(): AgentActivity {
+  return {
+    agentId: 'hunter',
+    status: 'standby',
+    currentTask: null,
+    lastActiveAt: new Date(Date.now() - 24 * 3_600_000).toISOString(),
+    source: 'estimated',
+    detail: 'Awaiting visual tasks',
+    healthClass: 'ok',
   };
 }
 

@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react(), projectsPlugin(), monitorPlugin()],
   server: {
     host: 'localhost',
-    port: 3000,
+    port: 3849,
     open: true,
     // For a prettier hostname, add to /etc/hosts:
     //   127.0.0.1  openclaw.local

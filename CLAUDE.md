@@ -25,10 +25,12 @@ Keep the app:
 
 These names are user-facing and should stay stable:
 
-- **Brodie** = main GPT-5.4 orchestrator
-- **Silver** = Claude ACP coding agent
-- **Geo** = Claude ACP research / writing / summarization agent
-- **Echo** = GPT-5.4 responsible for cron jobs
+- **Brodie** = main agent = Claude Opus 4.6 (anthropic/claude-opus-4-6)
+- **Silver** = Claude ACP — coding/development
+- **Geo** = Claude ACP — research/writing/summarization
+- **Echo** = Gemini ACP (gemini-3.0-flash) — cron jobs
+- **Harvey** = MiniMax ACP (MiniMax-M2.5) — code review & secondary coding agent
+- **Hunter** = Gemini ACP (gemini-3-pro-image-preview) — visual engineer
 
 ## UI priorities
 
@@ -88,7 +90,7 @@ The user shared screenshots as guidance. Match the spirit:
 - Make fallback states explicit and readable
 - Do not break the shell command launcher expectation:
   - `openclaw command center`
-  - target URL should be `http://localhost:3849`
+  - target URL should be `http://localhost:3852`
 
 ## Safe assumptions
 

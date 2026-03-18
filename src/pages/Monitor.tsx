@@ -12,7 +12,7 @@ import {
 
 /** Available poll intervals */
 const POLL_OPTIONS = [2, 5, 10, 30] as const;
-const AGENTS = ['all', 'Silver', 'Brodie', 'Geo', 'Echo'];
+const AGENTS = ['all', 'Silver', 'Brodie', 'Geo', 'Echo', 'Harvey', 'Hunter'];
 const DIRECTIONS = ['all', 'received', 'sent'] as const;
 
 /** Source label for display */
@@ -268,7 +268,7 @@ export default function Monitor() {
       <div className="monitor-footer">
         <span>{filtered.length} / {entries.length} entries</span>
         <span className="monitor-footer-agents">
-          {['Brodie', 'Silver', 'Geo', 'Echo'].map((a) => {
+          {['Brodie', 'Silver', 'Geo', 'Echo', 'Harvey', 'Hunter'].map((a) => {
             const count = agentCounts.get(a) || 0;
             return count > 0 ? (
               <span key={a} className="monitor-footer-agent" style={{ color: agentColors[a] }}>
