@@ -174,7 +174,7 @@ export default function Monitor() {
                 const count = agentCounts.get(agent) || 0;
                 return (
                   <option key={model} value={model}>
-                    {model} ({count})
+                    {agent} · {model} ({count})
                   </option>
                 );
               })}
@@ -304,7 +304,7 @@ export default function Monitor() {
             const count = agentCounts.get(agent) || 0;
             return count > 0 ? (
               <span key={agent} className="monitor-footer-agent" style={{ color: agentColors[agent] }}>
-                {model}: {count}
+                {agent} · {model}: {count}
               </span>
             ) : null;
           })}
@@ -363,8 +363,8 @@ function LogRow({
       onClick={entry.truncated ? onToggle : undefined}
     >
       <span className="monitor-time">{formatTime(entry.timestamp)}</span>
-      <span className="monitor-agent" style={{ color }} title={`Agent: ${entry.agent}`}>
-        {modelLabel}
+      <span className="monitor-agent" style={{ color }} title={`Agent: ${entry.agent} · Model: ${modelLabel}`}>
+        {entry.agent} · {modelLabel}
       </span>
       {lifecycle ? (
         <span className={`monitor-dir monitor-lifecycle-badge ${lifecycle.className}`}>
