@@ -18,6 +18,11 @@ export const cronJobs: CronJob[] = [
   { name: 'Daily Tweet Summary', schedule: '0 23 * * *', category: 'daily', time: '23:00', agent: 'Echo', description: 'Roam Quick Capture tweets digest' },
   { name: 'Daily Activity Log to Roam', schedule: '30 23 * * *', category: 'daily', time: '23:30', agent: 'Echo', description: 'Claude/OpenClaw activity log' },
   { name: 'Daily Exercise Reminder', schedule: '0 6 * * *', category: 'daily', time: '06:00', agent: 'Echo', description: 'Exercise reminder (every day)' },
+  { name: 'Hunter: Morning Clinical Radar', schedule: '5 6 * * *', category: 'daily', time: '06:05', agent: 'Hunter', description: 'Clinical morning radar with Reader/email bias' },
+  { name: 'Hunter: Evening Reader Triage', schedule: '30 20 * * *', category: 'daily', time: '20:30', agent: 'Hunter', description: 'Reader inbox triage, max 3 items' },
+  { name: 'Hunter: Nightly Learning Recap', schedule: '30 21 * * *', category: 'daily', time: '21:30', agent: 'Hunter', description: '3-bullet knowledge compression' },
+  { name: 'Shin: Cron & Gateway Watchdog', schedule: 'every 2h', category: 'daily', time: '00:00', agent: 'Shin', description: 'Gateway, cron failures, session/log watchdog' },
+  { name: 'Shin: Late-Night Claude Quota Watch', schedule: '30 21,22,23 * * *', category: 'daily', time: '21:30', agent: 'Shin', description: 'Claude quota <20% warning before late-night cron failures' },
 
   // === WEEKLY RESEARCH DIGESTS ===
   { name: 'Complex PCI Review', schedule: '0 7 * * 1', category: 'weekly', dayOfWeek: 1, time: '07:00', agent: 'Echo', description: 'PubMed: CTO PCI, complex interventions' },

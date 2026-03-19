@@ -10,12 +10,14 @@ export type CronStatus =
   | 'Unknown';    // No data available
 
 export interface CronJobStatus {
+  id?: string;
   job: CronJob;
   status: CronStatus;
   lastRun: string | null;   // ISO datetime or null
   nextRun: string | null;   // ISO datetime or null
   duration: string | null;  // e.g. "1.2s"
   message: string | null;   // Last output/error snippet
+  consecutiveErrors?: number;
 }
 
 const STATUS_API_URL = '/api/cron/status';

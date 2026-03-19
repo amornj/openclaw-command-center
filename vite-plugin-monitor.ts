@@ -1,7 +1,7 @@
 import type { Plugin } from 'vite';
 import { readdirSync, readFileSync, statSync, existsSync } from 'fs';
 import { join, basename } from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 
 const HOME = process.env.HOME || '/Users/home';
 const CLAUDE_DIR = join(HOME, '.claude');
@@ -178,13 +178,18 @@ function inferAgentFromProject(projName: string, entry: Record<string, unknown>,
   return 'Silver';
 }
 
-/** Map cron job model to agent name */
-function inferAgentFromCronModel(model?: string): string {
-  if (!model) return 'Echo';
-  const m = String(model).toLowerCase();
+/** Map cron job model/name to agent name */
+function inferAgentFromCron(model: string | undefined, jobName: string): string {
+  const name = String(jobName || '').toLowerCase();
+  const m = String(model || '').toLowerCase();
+  if (name.startsWith('hunter:')) return 'Hunter';
+  if (name.startsWith('shin:')) return 'Shin';
   if (m.includes('minimax')) return 'Harvey';
+  if (m.includes('gpt-5.4-mini') || m.includes('gpt-4o-mini')) return 'Shin';
+  if (m.includes('gemini-3.1-flash-lite')) return 'Hunter';
   if (m.includes('gemini-3-pro') || m.includes('image-preview')) return 'Hunter';
   if (m.includes('gemini')) return 'Echo';
+  if (m.includes('gpt-5.4')) return 'Geo';
   if (m.includes('claude') || m.includes('anthropic')) return 'Brodie';
   return 'Echo';
 }
@@ -436,7 +441,7 @@ function getEchoCronMessages(maxAgeMinutes: number, limit: number): MonitorEntry
             const durationMs = typeof d.durationMs === 'number' ? d.durationMs : undefined;
             const nextRunAtMs = typeof d.nextRunAtMs === 'number' ? d.nextRunAtMs : undefined;
             const deliverySt = d.deliveryStatus || '';
-            const cronAgent = inferAgentFromCronModel(d.model);
+            const cronAgent = inferAgentFromCron(d.model, jobName);
 
             let summary = '';
             if (d.summary) {
@@ -807,6 +812,109 @@ function findMostRecentJsonl(): { path: string; mtimeMs: number; project: string
 }
 
 // =========================================================================
+// Cron status + run-now API for Command Center
+// =========================================================================
+
+interface CronApiStatus {
+  id: string;
+  job: {
+    name: string;
+    schedule: string;
+    category: string;
+    time: string;
+    agent: string;
+    description?: string;
+  };
+  status: 'Scheduled' | 'Running' | 'Succeeded' | 'Failed' | 'Partial' | 'Disabled' | 'Unknown';
+  lastRun: string | null;
+  nextRun: string | null;
+  duration: string | null;
+  message: string | null;
+  consecutiveErrors?: number;
+}
+
+function inferCategoryFromSchedule(schedule: any): 'daily' | 'weekly' | 'monthly' | 'yearly' | 'bimonthly' {
+  if (schedule?.kind === 'every') return 'daily';
+  const expr = String(schedule?.expr || '');
+  const parts = expr.split(/\s+/);
+  if (parts.length >= 5) {
+    const dom = parts[2];
+    const month = parts[3];
+    const dow = parts[4];
+    if (dom === '*' && month === '*' && dow === '*') return 'daily';
+    if (dow !== '*') return 'weekly';
+    if (month === '*') return 'monthly';
+    return month.includes(',') ? 'bimonthly' : 'yearly';
+  }
+  return 'daily';
+}
+
+function inferTimeFromSchedule(schedule: any): string {
+  if (schedule?.kind === 'every') return '00:00';
+  const expr = String(schedule?.expr || '');
+  const parts = expr.split(/\s+/);
+  if (parts.length >= 2) {
+    const minute = String(parts[0] ?? '0').padStart(2, '0');
+    const hour = String(parts[1] ?? '0').padStart(2, '0');
+    if (/^\d+$/.test(minute) && /^\d+$/.test(hour)) return `${hour}:${minute}`;
+  }
+  return '00:00';
+}
+
+function mapCronStatus(lastStatus: string | undefined, enabled: boolean): CronApiStatus['status'] {
+  if (!enabled) return 'Disabled';
+  switch (String(lastStatus || '').toLowerCase()) {
+    case 'ok': return 'Succeeded';
+    case 'error': return 'Failed';
+    case 'running': return 'Running';
+    case 'partial': return 'Partial';
+    default: return 'Scheduled';
+  }
+}
+
+function formatDuration(durationMs?: number): string | null {
+  if (typeof durationMs !== 'number') return null;
+  return durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)}s` : `${durationMs}ms`;
+}
+
+function getCronStatusesFromJobsFile(): CronApiStatus[] {
+  if (!existsSync(CRON_JOBS_FILE)) return [];
+  const data = JSON.parse(readFileSync(CRON_JOBS_FILE, 'utf-8'));
+  const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+
+  return jobs
+    .filter((job: any) => !job.deleteAfterRun)
+    .map((job: any) => ({
+      id: String(job.id),
+      job: {
+        name: job.name,
+        schedule: job.schedule?.kind === 'every'
+          ? `every ${Math.round((job.schedule.everyMs || 0) / 3600000)}h`
+          : job.schedule?.expr || job.schedule?.at || 'unknown',
+        category: inferCategoryFromSchedule(job.schedule),
+        time: inferTimeFromSchedule(job.schedule),
+        agent: inferAgentFromCron(job.payload?.model, job.name),
+        description: job.payload?.message ? String(job.payload.message).split('\n')[0].slice(0, 120) : undefined,
+      },
+      status: mapCronStatus(job.state?.lastStatus || job.state?.lastRunStatus, job.enabled !== false),
+      lastRun: job.state?.lastRunAtMs ? new Date(job.state.lastRunAtMs).toISOString() : null,
+      nextRun: job.state?.nextRunAtMs ? new Date(job.state.nextRunAtMs).toISOString() : null,
+      duration: formatDuration(job.state?.lastDurationMs),
+      message: job.state?.lastError || null,
+      consecutiveErrors: job.state?.consecutiveErrors || 0,
+    }))
+    .sort((a: CronApiStatus, b: CronApiStatus) => (a.job.time || '').localeCompare(b.job.time || ''));
+}
+
+function runCronJobNow(id: string) {
+  const out = execFileSync('openclaw', ['cron', 'run', id, '--timeout', '30000'], {
+    encoding: 'utf-8',
+    timeout: 35000,
+  });
+  return out;
+}
+
+// =========================================================================
 // Vite plugin export
 // =========================================================================
 
@@ -825,6 +933,48 @@ export default function monitorPlugin(): Plugin {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: String(e) }));
         }
+      });
+
+      // Live cron status from ~/.openclaw/cron/jobs.json
+      server.middlewares.use('/api/cron/status', (_req, res) => {
+        try {
+          const statuses = getCronStatusesFromJobsFile();
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify(statuses));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
+
+      // Run a cron job on demand
+      server.middlewares.use('/api/cron/run', (req, res) => {
+        if ((req.method || 'GET').toUpperCase() !== 'POST') {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        let body = '';
+        req.on('data', (chunk) => { body += String(chunk); });
+        req.on('end', () => {
+          try {
+            const parsed = body ? JSON.parse(body) : {};
+            const id = String(parsed.id || '').trim();
+            if (!id) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Missing job id' }));
+              return;
+            }
+            const output = runCronJobNow(id);
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: true, output }));
+          } catch (e) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ ok: false, error: String(e) }));
+          }
+        });
       });
 
       // Monitor messages endpoint

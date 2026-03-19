@@ -30,27 +30,46 @@ export default function CronTracker() {
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [tab, setTab] = useState<Tab>('list');
+  const [runningJobId, setRunningJobId] = useState<string | null>(null);
+
+  const loadStatuses = async (cancelled = false) => {
+    const statuses = await fetchCronStatuses();
+    if (cancelled) return;
+    setJobs(statuses);
+    setLoading(false);
+    setIsLive(statuses.some((s) => s.message !== null || !!s.id));
+  };
 
   useEffect(() => {
     trackPageView('Cron Tracker');
     let cancelled = false;
     loadStatuses();
 
-    const interval = setInterval(() => { trackRefreshPoll('Cron Tracker'); loadStatuses(); }, 30_000);
+    const interval = setInterval(() => { trackRefreshPoll('Cron Tracker'); loadStatuses(cancelled); }, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
-
-    async function loadStatuses() {
-      const statuses = await fetchCronStatuses();
-      if (cancelled) return;
-      setJobs(statuses);
-      setLoading(false);
-      setIsLive(statuses.some((s) => s.message !== null));
-    }
   }, []);
 
   const counts = countByStatus(jobs);
   const filtered = filter === 'All' ? jobs : jobs.filter((j) => j.status === filter);
   const statusMap = new Map(jobs.map((s) => [s.job.name, s]));
+
+  const handleRunNow = async (entry: CronJobStatus) => {
+    if (!entry.id || runningJobId) return;
+    setRunningJobId(entry.id);
+    try {
+      const res = await fetch('/api/cron/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entry.id }),
+      });
+      if (!res.ok) throw new Error(`Run failed (${res.status})`);
+      await loadStatuses();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to run cron job');
+    } finally {
+      setRunningJobId(null);
+    }
+  };
 
   return (
     <div className="cron-tracker-page">
@@ -121,6 +140,8 @@ export default function CronTracker() {
                     <th>Last Run</th>
                     <th>Next Run</th>
                     <th>Duration</th>
+                    <th>Agent</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -144,6 +165,22 @@ export default function CronTracker() {
                         <td className="cron-mono">{formatTime(entry.lastRun)}</td>
                         <td className="cron-mono">{formatTime(entry.nextRun)}</td>
                         <td className="cron-mono">{entry.duration ?? '—'}</td>
+                        <td>{entry.job.agent}</td>
+                        <td>
+                          <button
+                            className="refresh-btn"
+                            disabled={!entry.id || runningJobId === entry.id}
+                            onClick={() => handleRunNow(entry)}
+                            title={entry.id ? 'Run this cron job now' : 'Run-now not available for schedule-derived jobs'}
+                          >
+                            {runningJobId === entry.id ? 'Running…' : 'Run now'}
+                          </button>
+                          {typeof entry.consecutiveErrors === 'number' && entry.consecutiveErrors > 0 && (
+                            <div className="cron-job-desc" style={{ marginTop: 6, color: '#fca5a5' }}>
+                              {entry.consecutiveErrors} consecutive error{entry.consecutiveErrors > 1 ? 's' : ''}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

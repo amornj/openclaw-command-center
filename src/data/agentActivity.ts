@@ -140,9 +140,10 @@ export async function fetchAgentActivity(): Promise<AgentActivity[]> {
   const geo = fallbackGeo();
   const harvey = fallbackHarvey();
   const hunter = fallbackHunter();
-  const brodie = fallbackBrodie([silver, echo, geo, harvey, hunter]);
+  const shin = fallbackShin();
+  const brodie = fallbackBrodie([silver, echo, geo, harvey, hunter, shin]);
 
-  return [brodie, silver, geo, echo, harvey, hunter];
+  return [brodie, silver, geo, echo, harvey, hunter, shin];
 }
 
 // --- Fallback functions (used only when live API is unavailable) ---
@@ -220,21 +221,14 @@ function getLastCronRun(now: Date, windows: number[]): string {
 }
 
 function fallbackGeo(): AgentActivity {
-  const now = new Date();
-  const hour = now.getHours();
-  const isWorkingHours = hour >= 9 && hour <= 21;
-  const status: ActivityStatus = isWorkingHours ? 'idle' : 'standby';
-
   return {
     agentId: 'geo',
-    status,
+    status: 'idle',
     currentTask: null,
-    lastActiveAt: new Date(
-      now.getTime() - (isWorkingHours ? 25 * 60_000 : 4 * 3_600_000)
-    ).toISOString(),
+    lastActiveAt: new Date(Date.now() - 30 * 60_000).toISOString(),
     source: 'estimated',
-    detail: isWorkingHours ? 'Available for research tasks' : 'Off-hours standby',
-    healthClass: computeHealthClass(status),
+    detail: 'Available as 2nd coder',
+    healthClass: 'idle',
   };
 }
 
@@ -245,19 +239,35 @@ function fallbackHarvey(): AgentActivity {
     currentTask: null,
     lastActiveAt: new Date(Date.now() - 24 * 3_600_000).toISOString(),
     source: 'estimated',
-    detail: 'On-demand: code review & secondary coding',
+    detail: 'Available as 4th coder',
     healthClass: 'ok',
   };
 }
 
 function fallbackHunter(): AgentActivity {
+  const now = new Date();
+  const hour = now.getHours();
+  const cronHours = [6, 20, 21];
+  const nextWindow = cronHours.find((h) => h > hour) ?? cronHours[0];
   return {
     agentId: 'hunter',
     status: 'standby',
     currentTask: null,
-    lastActiveAt: new Date(Date.now() - 24 * 3_600_000).toISOString(),
+    lastActiveAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
     source: 'estimated',
-    detail: 'Awaiting visual tasks',
+    detail: `Reader triage / radar — next run at ${String(nextWindow).padStart(2, '0')}:00`,
+    healthClass: 'ok',
+  };
+}
+
+function fallbackShin(): AgentActivity {
+  return {
+    agentId: 'shin',
+    status: 'standby',
+    currentTask: null,
+    lastActiveAt: new Date(Date.now() - 1 * 3_600_000).toISOString(),
+    source: 'estimated',
+    detail: 'Watching gateway, cron failures, and heartbeat health',
     healthClass: 'ok',
   };
 }

@@ -12,7 +12,18 @@ import {
 
 /** Available poll intervals */
 const POLL_OPTIONS = [2, 5, 10, 30] as const;
-const AGENTS = ['all', 'Silver', 'Brodie', 'Geo', 'Echo', 'Harvey', 'Hunter'];
+const AGENTS = ['all', 'sonnet-4.6', 'opus-4.6', 'gpt-5.4', 'gemini-3.1-pro', 'minimax-m2.7', 'gemini-3.1-flash-lite', 'gpt-5.4-mini'];
+
+/** Reverse map: model label → agent id (for filtering) */
+const MODEL_TO_AGENT: Record<string, string> = {
+  'sonnet-4.6': 'Silver',
+  'opus-4.6': 'Brodie',
+  'gpt-5.4': 'Geo',
+  'gemini-3.1-pro': 'Echo',
+  'minimax-m2.7': 'Harvey',
+  'gemini-3.1-flash-lite': 'Hunter',
+  'gpt-5.4-mini': 'Shin',
+};
 const DIRECTIONS = ['all', 'received', 'sent'] as const;
 
 /** Source label for display */
@@ -20,6 +31,17 @@ const SOURCE_LABELS: Record<string, string> = {
   'claude-session': 'Claude',
   'openclaw-main': 'OpenClaw',
   'cron-run': 'Cron',
+};
+
+/** Agent name → display model name for the Monitor column */
+const AGENT_MODEL_LABELS: Record<string, string> = {
+  Brodie:   'opus-4.6',
+  Silver:   'sonnet-4.6',
+  Geo:      'gpt-5.4',
+  Echo:     'gemini-3.1-pro',
+  Harvey:   'minimax-m2.7',
+  Hunter:   'gemini-3.1-flash-lite',
+  Shin:     'gpt-5.4-mini',
 };
 
 export default function Monitor() {
@@ -107,7 +129,12 @@ export default function Monitor() {
   // Clear buffer when time range changes
   useEffect(() => { clearBuffer(); }, [maxAge]);
 
-  const filtered = filterEntries(entries, filter);
+  // Convert model label back to agent name for filtering
+  const filterForEntries = {
+    ...filter,
+    agent: filter.agent === 'all' ? 'all' : (MODEL_TO_AGENT[filter.agent || ''] || 'all'),
+  };
+  const filtered = filterEntries(entries, filterForEntries);
 
   // Group entries by session for visual separators
   let lastSession = '';
@@ -141,11 +168,16 @@ export default function Monitor() {
               onChange={(e) => setFilter((f) => ({ ...f, agent: e.target.value }))}
               className="monitor-select"
             >
-              {AGENTS.map((a) => (
-                <option key={a} value={a}>
-                  {a === 'all' ? 'All Agents' : `${a} (${agentCounts.get(a) || 0})`}
-                </option>
-              ))}
+              <option value="all">All Models</option>
+              {AGENTS.filter((a) => a !== 'all').map((model) => {
+                const agent = MODEL_TO_AGENT[model];
+                const count = agentCounts.get(agent) || 0;
+                return (
+                  <option key={model} value={model}>
+                    {model} ({count})
+                  </option>
+                );
+              })}
             </select>
             <select
               value={filter.direction || 'all'}
@@ -268,11 +300,11 @@ export default function Monitor() {
       <div className="monitor-footer">
         <span>{filtered.length} / {entries.length} entries</span>
         <span className="monitor-footer-agents">
-          {['Brodie', 'Silver', 'Geo', 'Echo', 'Harvey', 'Hunter'].map((a) => {
-            const count = agentCounts.get(a) || 0;
+          {Object.entries(AGENT_MODEL_LABELS).map(([agent, model]) => {
+            const count = agentCounts.get(agent) || 0;
             return count > 0 ? (
-              <span key={a} className="monitor-footer-agent" style={{ color: agentColors[a] }}>
-                {a}: {count}
+              <span key={agent} className="monitor-footer-agent" style={{ color: agentColors[agent] }}>
+                {model}: {count}
               </span>
             ) : null;
           })}
@@ -312,6 +344,7 @@ function LogRow({
   onToggle: () => void;
 }) {
   const color = agentColors[entry.agent] || '#94a3b8';
+  const modelLabel = AGENT_MODEL_LABELS[entry.agent] || entry.agent;
   const dirIcon = entry.direction === 'received' ? '→'
     : entry.direction === 'sent' ? '←'
     : '◆';
@@ -330,8 +363,8 @@ function LogRow({
       onClick={entry.truncated ? onToggle : undefined}
     >
       <span className="monitor-time">{formatTime(entry.timestamp)}</span>
-      <span className="monitor-agent" style={{ color }}>
-        {entry.agent}
+      <span className="monitor-agent" style={{ color }} title={`Agent: ${entry.agent}`}>
+        {modelLabel}
       </span>
       {lifecycle ? (
         <span className={`monitor-dir monitor-lifecycle-badge ${lifecycle.className}`}>
