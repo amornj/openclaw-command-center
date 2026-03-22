@@ -63,6 +63,11 @@ export default function Monitor() {
   const logEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
+  // Pull-to-refresh state
+  const touchStartYRef = useRef(0);
+  const [pullY, setPullY] = useState(0);
+  const PULL_THRESHOLD = 64;
+
   // Use refs for the polling loop so interval changes take effect immediately
   const pollIntervalRef = useRef(pollInterval);
   const isLiveRef = useRef(isLive);
@@ -83,6 +88,39 @@ export default function Monitor() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     setAutoScroll(true);
     setShowScrollBtn(false);
+  }, []);
+
+  const onTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const el = logRef.current;
+    if (el && el.scrollTop === 0) {
+      touchStartYRef.current = e.touches[0].clientY;
+    } else {
+      touchStartYRef.current = 0;
+    }
+  }, []);
+
+  const onTouchEnd = useCallback(() => {
+    if (pullY >= PULL_THRESHOLD) {
+      doFetch();
+    }
+    setPullY(0);
+    touchStartYRef.current = 0;
+  }, [pullY, doFetch]);
+
+  // Non-passive touchmove so we can preventDefault and block native scroll while pulling
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el) return;
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchStartYRef.current) return;
+      const delta = e.touches[0].clientY - touchStartYRef.current;
+      if (delta > 0) {
+        e.preventDefault();
+        setPullY(Math.min(delta, PULL_THRESHOLD * 1.5));
+      }
+    };
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', handleTouchMove);
   }, []);
 
   // Core fetch function — always uses latest refs
@@ -208,6 +246,14 @@ export default function Monitor() {
           </div>
           <div className="monitor-status">
             <button
+              className="monitor-sync-btn"
+              onClick={doFetch}
+              disabled={isRefreshing}
+              title="Force sync"
+            >
+              {isRefreshing ? '↻' : '⟳'} Sync
+            </button>
+            <button
               className={`monitor-live-btn ${isLive ? 'active' : ''}`}
               onClick={() => setIsLive(!isLive)}
             >
@@ -247,7 +293,16 @@ export default function Monitor() {
         className="monitor-log"
         ref={logRef}
         onScroll={handleScroll}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
+        {pullY > 0 && (
+          <div className="monitor-pull-indicator" style={{ height: pullY }}>
+            <span style={{ opacity: pullY / PULL_THRESHOLD }}>
+              {pullY >= PULL_THRESHOLD ? '↑ Release to sync' : '↓ Pull to sync'}
+            </span>
+          </div>
+        )}
         {hasData === false && (
           <div className="monitor-empty">
             <p>No agent messages found in the selected time range.</p>

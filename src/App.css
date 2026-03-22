@@ -1684,6 +1684,41 @@ h2 {
   align-items: center;
   gap: 12px;
   font-size: 12px;
+  flex-wrap: wrap;
+  overflow-x: auto;
+}
+
+.monitor-sync-btn {
+  background: #1e2035;
+  border: 1px solid #2a2d45;
+  color: #94a3b8;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.monitor-sync-btn:hover:not(:disabled) {
+  border-color: #6366f1;
+  color: #a5b4fc;
+}
+
+.monitor-sync-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.monitor-pull-indicator {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 8px;
+  color: #6366f1;
+  font-size: 12px;
+  overflow: hidden;
+  transition: height 0.1s;
+  flex-shrink: 0;
 }
 
 .monitor-live-btn {
